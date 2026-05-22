@@ -44,7 +44,11 @@ public final class CodexUsageReader: @unchecked Sendable {
         var best: CodexUsageSnapshot?
 
         for file in files.prefix(maxFiles) {
-            if let snapshot = latestSnapshot(in: file) {
+            if let currentBest = best, file.modifiedAt <= currentBest.observedAt {
+                break
+            }
+
+            if let snapshot = latestSnapshot(in: file.url) {
                 if let currentBest = best {
                     if snapshot.observedAt > currentBest.observedAt {
                         best = snapshot
@@ -62,7 +66,7 @@ public final class CodexUsageReader: @unchecked Sendable {
         return best
     }
 
-    private func jsonlFiles() -> [URL] {
+    private func jsonlFiles() -> [CandidateFile] {
         let datedFiles = recentDateDirectories().flatMap { directory in
             collectJSONLFiles(in: directory, recursive: false)
         }
@@ -134,14 +138,14 @@ public final class CodexUsageReader: @unchecked Sendable {
         }
     }
 
-    private func sortedByModifiedDate(_ urls: [URL]) -> [URL] {
-        var files: [(url: URL, modifiedAt: Date)] = []
+    private func sortedByModifiedDate(_ urls: [URL]) -> [CandidateFile] {
+        var files: [CandidateFile] = []
 
         for file in urls {
             let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
             guard values?.isRegularFile == true else { continue }
 
-            files.append((file, values?.contentModificationDate ?? .distantPast))
+            files.append(CandidateFile(url: file, modifiedAt: values?.contentModificationDate ?? .distantPast))
         }
 
         return files
@@ -151,7 +155,6 @@ public final class CodexUsageReader: @unchecked Sendable {
                 }
                 return lhs.modifiedAt > rhs.modifiedAt
             }
-            .map(\.url)
     }
 
     private func latestSnapshot(in file: URL) -> CodexUsageSnapshot? {
@@ -163,6 +166,10 @@ public final class CodexUsageReader: @unchecked Sendable {
         let decoder = JSONDecoder()
 
         for (offset, line) in contents.split(separator: "\n", omittingEmptySubsequences: true).enumerated() {
+            guard line.contains("\"rate_limits\"") else {
+                continue
+            }
+
             guard let data = line.data(using: .utf8),
                   let event = try? decoder.decode(CodexLogEvent.self, from: data),
                   event.type == "event_msg",
@@ -229,6 +236,11 @@ public final class CodexUsageReader: @unchecked Sendable {
     private func fileModifiedDate(_ file: URL) -> Date? {
         try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
+}
+
+private struct CandidateFile {
+    let url: URL
+    let modifiedAt: Date
 }
 
 private struct CodexLogEvent: Decodable {

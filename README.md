@@ -15,15 +15,15 @@ menu bar.
 
 Download the current macOS zip:
 
-https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.0-universal-macos.zip
+https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.1-universal-macos.zip
 
 Checksum:
 
-https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.0-universal-macos.zip.sha256
+https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.1-universal-macos.zip.sha256
 
 Then:
 
-1. Unzip `Howmuchusage-0.1.0-universal-macos.zip`.
+1. Unzip `Howmuchusage-0.1.1-universal-macos.zip`.
 2. Move `Howmuchusage.app` to `/Applications`.
 3. Open it.
 4. If macOS blocks the first launch, right-click the app and choose `Open`.
@@ -69,8 +69,10 @@ It does not display or store prompts, responses, or conversation content.
 
 ## Accuracy
 
-This is a local convenience tool, not an official OpenAI usage API. If the value
-differs from the official Codex Usage panel, trust the official panel.
+This is a local convenience tool, not an official OpenAI usage API. `Refresh`
+re-reads the latest local `~/.codex/sessions` logs; it does not query OpenAI's
+server-side usage endpoint. If the value differs from the official Codex Usage
+panel, trust the official panel.
 
 Use `Open Usage` in the popover to open:
 
@@ -93,16 +95,16 @@ Scripts/package-release.sh
 The default release package is a universal macOS binary:
 
 ```text
-dist/release/Howmuchusage-0.1.0-universal-macos.zip
-dist/release/Howmuchusage-0.1.0-universal-macos.zip.sha256
+dist/release/Howmuchusage-0.1.1-universal-macos.zip
+dist/release/Howmuchusage-0.1.1-universal-macos.zip.sha256
 ```
 
 To publish the downloadable build in the repository:
 
 ```sh
 mkdir -p Downloads
-cp dist/release/Howmuchusage-0.1.0-universal-macos.zip Downloads/
-cp dist/release/Howmuchusage-0.1.0-universal-macos.zip.sha256 Downloads/
+cp dist/release/Howmuchusage-0.1.1-universal-macos.zip Downloads/
+cp dist/release/Howmuchusage-0.1.1-universal-macos.zip.sha256 Downloads/
 ```
 
 ## Signing And Notarization

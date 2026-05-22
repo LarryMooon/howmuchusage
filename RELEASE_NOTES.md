@@ -1,28 +1,38 @@
-# Howmuchusage 0.1.0
+# Howmuchusage Release Notes
 
-Initial public release.
+## 0.1.1
 
-## Highlights
+Refresh responsiveness and accuracy-labeling update.
 
-- Native macOS menu bar app.
-- Shows remaining Codex quota for the 5-hour and weekly windows.
-- Two compact rows: `5h` and `1w`.
-- Thin battery-style bars with green/yellow/red remaining-quota thresholds.
-- 1-minute auto refresh.
-- Popover with reset time, source snapshot, manual refresh, Open Usage, Quit, and Launch at Login.
-- Universal macOS binary for Apple Silicon and Intel Macs.
+- Moved manual refresh work off the main UI thread so the popover reacts immediately.
+- Reduced log parsing work by decoding only JSONL lines that contain `rate_limits`.
+- Stops scanning older session files once a newer usage snapshot is already confirmed.
+- Popover now shows that the data mode is `local Codex session log`.
+- README now explains that `Refresh` re-reads local logs and does not query the official OpenAI usage service.
 
-## Install
+Download:
 
-1. Download `Howmuchusage-0.1.0-universal-macos.zip`.
+1. Download `Howmuchusage-0.1.1-universal-macos.zip`.
 2. Unzip it.
 3. Move `Howmuchusage.app` to `/Applications`.
-4. Open it.
-5. If macOS blocks the first launch, right-click the app and choose `Open`.
+4. If macOS blocks the first launch, right-click the app and choose `Open`.
 
-## Notes
+## 0.1.0
 
-- Requires macOS 13 or newer.
+Initial public build.
+
+- Native macOS menu bar app.
+- Two-line compact menu bar display:
+  - `5h` for the current 5-hour Codex window.
+  - `1w` for the weekly window.
+- Remaining quota percent, not used percent.
+- Battery-style thin bars.
+- Green, yellow, and red thresholds based on remaining quota.
+- Popover with reset time, source snapshot, manual refresh, Open Usage, Quit, and Launch at Login.
+- Universal macOS build support through `Scripts/package-release.sh`.
+
+Notes:
+
 - Requires local Codex logs under `~/.codex/sessions`.
 - This release is a local convenience tool, not an official OpenAI usage API.
 - If local values differ from the official Usage panel, trust the official Usage panel.

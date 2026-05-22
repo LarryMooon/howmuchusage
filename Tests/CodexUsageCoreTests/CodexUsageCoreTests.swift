@@ -86,4 +86,39 @@ final class CodexUsageCoreTests: XCTestCase {
         XCTAssertEqual(Int(snapshot.primary.usedPercent), 88)
         XCTAssertEqual(snapshot.sourceLine, 3)
     }
+
+    func testReaderFallsBackWhenNewestFileHasNoRateLimits() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HowmuchusageTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let usageFile = root.appendingPathComponent("older-usage.jsonl")
+        try """
+        {"timestamp":"2026-05-22T10:01:00.000Z","type":"event_msg","payload":{"rate_limits":{"limit_id":"codex","primary":{"used_percent":12.0,"window_minutes":300,"resets_at":1779457603},"secondary":{"used_percent":34.0,"window_minutes":10080,"resets_at":1779848664},"plan_type":"prolite"}}}
+        """.write(to: usageFile, atomically: true, encoding: .utf8)
+
+        let newerFile = root.appendingPathComponent("newer-without-usage.jsonl")
+        try """
+        {"timestamp":"2026-05-22T10:02:00.000Z","type":"event_msg","payload":{"type":"agent_message","message":"not usage"}}
+        """.write(to: newerFile, atomically: true, encoding: .utf8)
+
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_000)],
+            ofItemAtPath: usageFile.path
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 2_000)],
+            ofItemAtPath: newerFile.path
+        )
+
+        let snapshot = try CodexUsageReader(sessionRoot: root).latestSnapshot()
+
+        XCTAssertEqual(Int(snapshot.primary.usedPercent), 12)
+        XCTAssertEqual(Int(snapshot.secondary.usedPercent), 34)
+        XCTAssertEqual(
+            URL(fileURLWithPath: snapshot.sourceFile).standardizedFileURL,
+            usageFile.standardizedFileURL
+        )
+    }
 }

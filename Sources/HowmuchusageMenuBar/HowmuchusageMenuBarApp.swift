@@ -41,9 +41,12 @@ final class UsageViewModel: ObservableObject {
     @Published private(set) var launchAtLoginStatusText = "Off"
     @Published private(set) var launchAtLoginErrorMessage: String?
     @Published private(set) var lastRefresh = Date()
+    @Published private(set) var lastRefreshDuration: TimeInterval?
+    @Published private(set) var isRefreshing = false
 
     private let reader = CodexUsageReader()
     private var timer: Timer?
+    private var refreshTask: Task<Void, Never>?
 
     init() {
         refresh()
@@ -60,14 +63,47 @@ final class UsageViewModel: ObservableObject {
         snapshot.map { ProbeOutput(snapshot: $0, now: Date()) }
     }
 
-    func refresh() {
-        do {
-            snapshot = try reader.latestSnapshot()
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
+    var refreshStatusText: String {
+        if isRefreshing {
+            return "reading local logs..."
         }
-        lastRefresh = Date()
+
+        if let lastRefreshDuration {
+            return String(format: "read took %.2fs", lastRefreshDuration)
+        }
+
+        return "ready"
+    }
+
+    func refresh() {
+        refreshTask?.cancel()
+        isRefreshing = true
+        let startedAt = Date()
+        let reader = self.reader
+
+        refreshTask = Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                Result {
+                    try reader.latestSnapshot()
+                }
+            }.value
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            switch result {
+            case .success(let snapshot):
+                self?.snapshot = snapshot
+                self?.errorMessage = nil
+            case .failure(let error):
+                self?.errorMessage = error.localizedDescription
+            }
+
+            self?.lastRefresh = Date()
+            self?.lastRefreshDuration = Date().timeIntervalSince(startedAt)
+            self?.isRefreshing = false
+        }
     }
 
     func openUsage() {
@@ -352,6 +388,8 @@ struct UsagePopover: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     DetailLine(label: "Update", value: "\(CodexUsageFormatter.timeFormatter.string(from: output.observedAt)) · \(output.stale ? "stale" : "fresh")")
+                    DetailLine(label: "Refresh", value: model.refreshStatusText)
+                    DetailLine(label: "Mode", value: "local Codex session log")
                     DetailLine(label: "Source", value: "\(URL(fileURLWithPath: output.sourceFile).lastPathComponent):\(output.sourceLine)")
                 }
                 .font(.caption2)
@@ -367,9 +405,10 @@ struct UsagePopover: View {
             }
 
             HStack {
-                Button("Refresh") {
+                Button(model.isRefreshing ? "Refreshing..." : "Refresh") {
                     model.refresh()
                 }
+                .disabled(model.isRefreshing)
 
                 Button("Open Usage") {
                     model.openUsage()
