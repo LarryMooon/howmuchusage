@@ -14,7 +14,7 @@ Initial public release.
 
 ## Install
 
-1. Download `Howmuchusage-0.1.0-macos.zip`.
+1. Download `Howmuchusage-0.1.0-universal-macos.zip`.
 2. Unzip it.
 3. Move `Howmuchusage.app` to `/Applications`.
 4. Open it.
