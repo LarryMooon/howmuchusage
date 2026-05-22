@@ -1,0 +1,6 @@
+{"timestamp":"2026-05-22T10:19:00.000Z","type":"session_meta","payload":{"id":"sample"}}
+{"timestamp":"2026-05-22T10:20:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_tokens":1}}}
+bad json line
+{"timestamp":"2026-05-22T10:21:24.481Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":686855}},"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":49.0,"window_minutes":300,"resets_at":1779457603},"secondary":{"used_percent":53.0,"window_minutes":10080,"resets_at":1779848664},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}
+{"timestamp":"2026-05-22T10:19:30.000Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":1.0,"window_minutes":300,"resets_at":1779457603},"secondary":{"used_percent":2.0,"window_minutes":10080,"resets_at":1779848664},"plan_type":"prolite"}}}
+
