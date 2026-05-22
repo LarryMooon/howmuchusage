@@ -13,9 +13,13 @@ menu bar.
 
 ## Download
 
-Download the latest macOS zip from:
+Download the current macOS zip:
 
-https://github.com/LarryMooon/howmuchusage/releases/latest
+https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.0-macos.zip
+
+Checksum:
+
+https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-0.1.0-macos.zip.sha256
 
 Then:
 
@@ -91,6 +95,14 @@ The default release package is a universal macOS binary:
 ```text
 dist/release/Howmuchusage-0.1.0-macos.zip
 dist/release/Howmuchusage-0.1.0-macos.zip.sha256
+```
+
+To publish the downloadable build in the repository:
+
+```sh
+mkdir -p Downloads
+cp dist/release/Howmuchusage-0.1.0-macos.zip Downloads/
+cp dist/release/Howmuchusage-0.1.0-macos.zip.sha256 Downloads/
 ```
 
 ## Signing And Notarization
