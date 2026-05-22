@@ -1,5 +1,22 @@
 # Howmuchusage Release Notes
 
+## 0.1.2
+
+Local snapshot clarity update.
+
+- Menu bar labels now use `~5h` and `~1w` to make the approximate local snapshot source visible.
+- Old local snapshots fade to gray in the menu bar.
+- Popover now highlights `Local snapshot · Xm ago`.
+- Manual button is now `Reload Snapshot` instead of `Refresh`.
+- README documents the key limitation: reloading this app only re-reads local Codex logs and cannot force OpenAI/Codex to refresh usage limits.
+
+Download:
+
+1. Download `Howmuchusage-0.1.2-universal-macos.zip`.
+2. Unzip it.
+3. Move `Howmuchusage.app` to `/Applications`.
+4. If macOS blocks the first launch, right-click the app and choose `Open`.
+
 ## 0.1.1
 
 Refresh responsiveness and accuracy-labeling update.

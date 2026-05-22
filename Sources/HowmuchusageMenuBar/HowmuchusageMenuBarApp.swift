@@ -174,7 +174,7 @@ final class StatusItemController: NSObject {
         if let button = statusItem.button {
             button.title = ""
             button.image = nil
-            button.toolTip = "Codex remaining quota"
+            button.toolTip = "Codex remaining quota from local snapshot"
             button.addSubview(statusView)
             statusView.frame = button.bounds
             statusView.autoresizingMask = [.width, .height]
@@ -187,6 +187,9 @@ final class StatusItemController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] snapshot in
                 self?.statusView.snapshot = snapshot
+                self?.statusItem.button?.toolTip = snapshot.map {
+                    CodexUsageFormatter.localSnapshotText(observedAt: $0.observedAt)
+                } ?? "Codex remaining quota from local snapshot"
             }
             .store(in: &cancellables)
 
@@ -223,7 +226,7 @@ final class StatusItemController: NSObject {
 }
 
 final class UsageStatusView: NSView {
-    static let preferredWidth: CGFloat = 80
+    static let preferredWidth: CGFloat = 86
 
     var snapshot: CodexUsageSnapshot? {
         didSet {
@@ -247,9 +250,11 @@ final class UsageStatusView: NSView {
         super.draw(dirtyRect)
 
         if let snapshot {
-            let lines = CodexUsageFormatter.menuLines(snapshot: snapshot, now: Date())
-            drawUsageLine(lines[0], row: 0)
-            drawUsageLine(lines[1], row: 1)
+            let now = Date()
+            let lines = CodexUsageFormatter.menuLines(snapshot: snapshot, now: now)
+            let isStale = snapshot.isStale(now: now, threshold: CodexUsageFormatter.staleSnapshotThresholdSeconds)
+            drawUsageLine(lines[0], row: 0, isStale: isStale)
+            drawUsageLine(lines[1], row: 1, isStale: isStale)
         } else {
             drawPlaceholder()
         }
@@ -263,29 +268,29 @@ final class UsageStatusView: NSView {
         onClick?()
     }
 
-    private func drawUsageLine(_ line: CodexUsageFormatter.UsageLine, row: Int) {
+    private func drawUsageLine(_ line: CodexUsageFormatter.UsageLine, row: Int, isStale: Bool) {
         let rowHeight = bounds.height / 2
         let rowY = CGFloat(row) * rowHeight
-        let textColor = NSColor.labelColor
-        let color = barColor(remainingPercent: line.remainingPercent)
+        let textColor = isStale ? NSColor.secondaryLabelColor : NSColor.labelColor
+        let color = isStale ? NSColor.secondaryLabelColor : barColor(remainingPercent: line.remainingPercent)
         let textY = rowY + max(0, (rowHeight - 8.5) / 2)
         let barHeight: CGFloat = 3
         let barY = rowY + max(0, (rowHeight - barHeight) / 2)
 
         drawText(
-            line.label,
-            rect: NSRect(x: 4, y: textY, width: 14, height: 8.5),
+            line.displayLabel,
+            rect: NSRect(x: 4, y: textY, width: 20, height: 8.5),
             fontSize: 7.2,
             color: textColor,
             alignment: .left
         )
 
-        let barRect = NSRect(x: 22, y: barY, width: 28, height: barHeight)
+        let barRect = NSRect(x: 28, y: barY, width: 28, height: barHeight)
         drawBatteryBar(rect: barRect, remainingPercent: line.remainingPercent, color: color)
 
         drawText(
             "\(line.remainingPercent)%",
-            rect: NSRect(x: 54, y: textY, width: 23, height: 8.5),
+            rect: NSRect(x: 60, y: textY, width: 23, height: 8.5),
             fontSize: 7.2,
             color: textColor,
             alignment: .right
@@ -362,6 +367,11 @@ struct UsagePopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let output = model.output {
+                SnapshotStatusLine(
+                    text: CodexUsageFormatter.localSnapshotText(observedAt: output.observedAt),
+                    isStale: output.stale
+                )
+
                 VStack(spacing: 7) {
                     BatteryUsageRow(
                         line: CodexUsageFormatter.usageLine(
@@ -371,7 +381,8 @@ struct UsagePopover: View {
                                 windowMinutes: output.primaryWindowMinutes,
                                 resetsAt: output.primaryResetAt
                             )
-                        )
+                        ),
+                        isStale: output.stale
                     )
 
                     BatteryUsageRow(
@@ -382,17 +393,23 @@ struct UsagePopover: View {
                                 windowMinutes: output.secondaryWindowMinutes,
                                 resetsAt: output.secondaryResetAt
                             )
-                        )
+                        ),
+                        isStale: output.stale
                     )
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    DetailLine(label: "Update", value: "\(CodexUsageFormatter.timeFormatter.string(from: output.observedAt)) · \(output.stale ? "stale" : "fresh")")
-                    DetailLine(label: "Refresh", value: model.refreshStatusText)
+                    DetailLine(label: "Observed", value: "\(CodexUsageFormatter.timeFormatter.string(from: output.observedAt)) · \(output.stale ? "old" : "recent")")
+                    DetailLine(label: "Reload", value: model.refreshStatusText)
                     DetailLine(label: "Mode", value: "local Codex session log")
                     DetailLine(label: "Source", value: "\(URL(fileURLWithPath: output.sourceFile).lastPathComponent):\(output.sourceLine)")
                 }
                 .font(.caption2)
+
+                Text("Reload only re-reads local logs. Official Usage may differ.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Divider()
 
@@ -405,7 +422,7 @@ struct UsagePopover: View {
             }
 
             HStack {
-                Button(model.isRefreshing ? "Refreshing..." : "Refresh") {
+                Button(model.isRefreshing ? "Reloading..." : "Reload Snapshot") {
                     model.refresh()
                 }
                 .disabled(model.isRefreshing)
@@ -422,6 +439,23 @@ struct UsagePopover: View {
             }
         }
         .padding(14)
+    }
+}
+
+struct SnapshotStatusLine: View {
+    let text: String
+    let isStale: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("~")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+            Text(text)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(isStale ? .secondary : .primary)
     }
 }
 
@@ -466,18 +500,19 @@ struct LaunchAtLoginRow: View {
 
 struct BatteryUsageRow: View {
     let line: CodexUsageFormatter.UsageLine
+    let isStale: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(line.label)
+                Text(line.displayLabel)
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .frame(width: 22, alignment: .leading)
 
                 Text("\(line.remainingPercent)% left")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(color)
+                    .foregroundStyle(valueColor)
 
                 Spacer(minLength: 8)
 
@@ -487,7 +522,7 @@ struct BatteryUsageRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            BatteryBar(remainingPercent: line.remainingPercent, height: 5)
+            BatteryBar(remainingPercent: line.remainingPercent, height: 5, isStale: isStale)
 
             Text("reset \(line.resetText)")
                 .font(.caption2)
@@ -496,7 +531,11 @@ struct BatteryUsageRow: View {
         .padding(.vertical, 2)
     }
 
-    private var color: Color {
+    private var valueColor: Color {
+        if isStale {
+            return .secondary
+        }
+
         switch line.remainingPercent {
         case ...5:
             return .red
@@ -511,6 +550,7 @@ struct BatteryUsageRow: View {
 struct BatteryBar: View {
     let remainingPercent: Int
     let height: CGFloat
+    let isStale: Bool
 
     var body: some View {
         GeometryReader { proxy in
@@ -531,6 +571,10 @@ struct BatteryBar: View {
     }
 
     private var color: Color {
+        if isStale {
+            return .secondary
+        }
+
         switch remainingPercent {
         case ...5:
             return .red

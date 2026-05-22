@@ -3,6 +3,7 @@ import Foundation
 public enum CodexUsageFormatter {
     public static let usageURL = URL(string: "https://chatgpt.com/codex/settings/usage")!
     public static let refreshIntervalSeconds: TimeInterval = 60
+    public static let staleSnapshotThresholdSeconds: TimeInterval = 600
 
     public struct UsageLine: Equatable, Sendable {
         public let label: String
@@ -13,16 +14,19 @@ public enum CodexUsageFormatter {
         public let barText: String
         public let colorName: String
 
+        public var displayLabel: String {
+            "~\(label)"
+        }
+
         public var title: String {
-            "\(label) \(remainingPercent)% \(barText)"
+            "\(displayLabel) \(remainingPercent)% \(barText)"
         }
     }
 
     public static func menuTitle(snapshot: CodexUsageSnapshot, now: Date = Date()) -> String {
         let primary = usageLine(label: "5h", window: snapshot.primary, now: now)
         let secondary = usageLine(label: "1w", window: snapshot.secondary, now: now)
-        let prefix = snapshot.isStale(now: now) ? "~" : ""
-        return "\(prefix)\(primary.label) \(primary.remainingPercent)% · \(secondary.label) \(secondary.remainingPercent)%"
+        return "\(primary.displayLabel) \(primary.remainingPercent)% · \(secondary.displayLabel) \(secondary.remainingPercent)%"
     }
 
     public static func menuLines(snapshot: CodexUsageSnapshot, now: Date = Date()) -> [UsageLine] {
@@ -36,17 +40,20 @@ public enum CodexUsageFormatter {
         let output = ProbeOutput(snapshot: snapshot, now: now)
         let lines = menuLines(snapshot: snapshot, now: now)
         let observed = timeFormatter.string(from: output.observedAt)
-        let staleLabel = output.stale ? "stale" : "fresh"
+        let staleLabel = output.stale ? "old local snapshot" : "recent local snapshot"
+        let primaryDisplayColor = output.stale ? "gray" : lines[0].colorName
+        let secondaryDisplayColor = output.stale ? "gray" : lines[1].colorName
 
         return """
-        \(lines[0].title) | color=\(lines[0].colorName)
-        \(lines[1].title) | color=\(lines[1].colorName)
+        \(lines[0].title) | color=\(primaryDisplayColor)
+        \(lines[1].title) | color=\(secondaryDisplayColor)
         ---
         5h left: \(lines[0].remainingPercent)%, reset in \(output.primaryRemaining) | color=\(lines[0].colorName)
         5h reset: \(lines[0].resetText)
         Weekly left: \(lines[1].remainingPercent)%, reset in \(output.secondaryRemaining) | color=\(lines[1].colorName)
         Weekly reset: \(lines[1].resetText)
-        Last update: \(observed) (\(staleLabel))
+        \(localSnapshotText(observedAt: output.observedAt, now: now)) (\(staleLabel))
+        Observed at: \(observed)
         Source: \(URL(fileURLWithPath: output.sourceFile).lastPathComponent):\(output.sourceLine)
         ---
         Open Codex Usage | href=\(usageURL.absoluteString)
@@ -57,9 +64,10 @@ public enum CodexUsageFormatter {
         let output = ProbeOutput(snapshot: snapshot, now: now)
         return """
         Codex remaining
-        5h left: \(remainingPercent(forUsedPercent: output.primaryUsedPercent))%, reset in \(output.primaryRemaining)
-        Weekly left: \(remainingPercent(forUsedPercent: output.secondaryUsedPercent))%, reset in \(output.secondaryRemaining)
-        Last update: \(dateTimeFormatter.string(from: output.observedAt))
+        ~5h left: \(remainingPercent(forUsedPercent: output.primaryUsedPercent))%, reset in \(output.primaryRemaining)
+        ~1w left: \(remainingPercent(forUsedPercent: output.secondaryUsedPercent))%, reset in \(output.secondaryRemaining)
+        \(localSnapshotText(observedAt: output.observedAt, now: now))
+        Observed at: \(dateTimeFormatter.string(from: output.observedAt))
         Source: \(output.sourceFile):\(output.sourceLine)
         """
     }
@@ -92,6 +100,31 @@ public enum CodexUsageFormatter {
         }
 
         return "\(hours):" + String(format: "%02d", minutes)
+    }
+
+    public static func localSnapshotText(observedAt: Date, now: Date = Date()) -> String {
+        "Local snapshot · \(ageText(since: observedAt, now: now))"
+    }
+
+    public static func ageText(since date: Date, now: Date = Date()) -> String {
+        let elapsed = max(0, Int(now.timeIntervalSince(date).rounded()))
+        let days = elapsed / 86_400
+        let hours = (elapsed % 86_400) / 3_600
+        let minutes = (elapsed % 3_600) / 60
+
+        if days > 0 {
+            return "\(days)d \(hours)h ago"
+        }
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m ago"
+        }
+
+        if minutes > 0 {
+            return "\(minutes)m ago"
+        }
+
+        return "just now"
     }
 
     public static func usageLine(label: String, window: UsageWindowSnapshot, now: Date = Date()) -> UsageLine {

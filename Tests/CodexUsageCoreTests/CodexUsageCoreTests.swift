@@ -37,12 +37,36 @@ final class CodexUsageCoreTests: XCTestCase {
 
         XCTAssertEqual(
             CodexUsageFormatter.menuTitle(snapshot: snapshot, now: Date(timeIntervalSince1970: 1_000)),
-            "5h 51% · 1w 47%"
+            "~5h 51% · ~1w 47%"
         )
 
         let lines = CodexUsageFormatter.menuLines(snapshot: snapshot, now: Date(timeIntervalSince1970: 1_000))
-        XCTAssertEqual(lines[0].title, "5h 51% [|||||-----]")
+        XCTAssertEqual(lines[0].title, "~5h 51% [|||||-----]")
         XCTAssertEqual(lines[0].colorName, "green")
+    }
+
+    func testFormatterBuildsLocalSnapshotAgeText() {
+        XCTAssertEqual(
+            CodexUsageFormatter.localSnapshotText(
+                observedAt: Date(timeIntervalSince1970: 1_000),
+                now: Date(timeIntervalSince1970: 1_000)
+            ),
+            "Local snapshot · just now"
+        )
+        XCTAssertEqual(
+            CodexUsageFormatter.localSnapshotText(
+                observedAt: Date(timeIntervalSince1970: 1_000),
+                now: Date(timeIntervalSince1970: 1_305)
+            ),
+            "Local snapshot · 5m ago"
+        )
+        XCTAssertEqual(
+            CodexUsageFormatter.localSnapshotText(
+                observedAt: Date(timeIntervalSince1970: 1_000),
+                now: Date(timeIntervalSince1970: 4_900)
+            ),
+            "Local snapshot · 1h 5m ago"
+        )
     }
 
     func testBatteryThresholdsUseRemainingPercent() {
