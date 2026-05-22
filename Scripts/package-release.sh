@@ -120,7 +120,10 @@ submit_notarization
 assess_app
 
 create_zip "$APP_DIR" "$ZIP_PATH"
-shasum -a 256 "$ZIP_PATH" > "$ZIP_PATH.sha256"
+(
+  cd "$(dirname "$ZIP_PATH")"
+  shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256"
+)
 
 echo "Release zip: $ZIP_PATH"
 echo "Checksum: $ZIP_PATH.sha256"
