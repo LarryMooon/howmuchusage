@@ -39,3 +39,16 @@ jobs:
           dist/Howmuchusage.app/Contents/MacOS/howmuchusage-probe local || true
           echo '{"rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1}}}' \
             | dist/Howmuchusage.app/Contents/MacOS/Howmuchusage --statusline-bridge
+
+      - name: Release zip (universal, unsigned)
+        run: |
+          rm -rf dist
+          Scripts/package-release.sh
+          (cd dist/release && shasum -a 256 -c Howmuchusage-*-universal-macos.zip.sha256)
+          lipo -archs dist/Howmuchusage.app/Contents/MacOS/Howmuchusage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Howmuchusage-macos
+          path: dist/release/Howmuchusage-*-universal-macos.zip*
+          if-no-files-found: error
