@@ -165,3 +165,10 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 ## 15. 작업 로그
 
 - 2026-09-24: 기존 v0.1.2 구조 분석, 데이터 소스 조사, v2 설계 확정. 기존 `Sources/`는 v2 코드로 대체. 기존 Downloads(0.1.x zip)는 legacy로 보존.
+- 2026-09-24: v2 구현. `UsageCore` / `UsageProviders` / `Howmuchusage` / `HowmuchusageProbe` 작성, 테스트 42개 작성.
+- 2026-09-24: 자체 리뷰에서 찾은 문제와 수정
+  - Codex sparse push(`account/rateLimits/updated`)가 첫 full read보다 먼저 도착하면 weekly 창이 빠진 스냅샷이 표시될 수 있었다 → base가 없으면 push를 버리고 다음 정기 조회에 맡기도록 수정, 테스트는 결정적으로 재작성.
+  - `ClaudeProvider.read()`의 지역 변수 이름이 메서드와 겹쳐 컴파일 오류가 날 수 있었다 → `self.credentials(...)`로 수정.
+- 2026-09-24: GitHub Actions macOS 15 / Swift 6.1.2 CI 첫 실행 통과 (build, 42 tests 0 failures, app bundle, statusline bridge smoke). Node 20 경고로 `actions/checkout@v5`로 올림.
+- 2026-09-24: Compound 기록: `docs/solutions/architecture/usage-must-come-from-account-not-local-logs-2026-09-24.md`.
+- 다음 할 일: 맥에서 실제 계정으로 13절 검증 체크리스트 수행 → 결과를 이 로그에 기록.

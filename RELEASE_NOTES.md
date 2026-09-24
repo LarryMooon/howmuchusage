@@ -1,5 +1,16 @@
 # Howmuchusage Release Notes
 
+## 2.0.0 (in development, not yet packaged)
+
+Rebuilt from scratch for live Claude + Codex usage across all devices.
+
+- Codex usage from the official `codex app-server` protocol (account-wide, with push updates and ChatGPT sign-in).
+- Claude usage from the account usage endpoint using Claude Code's existing login (read-only), plus an optional Claude Code statusline hint.
+- Adaptive refresh with backoff, wake/network/popover triggers.
+- Freshness shown in the menu bar: plain = live, `~` = a few minutes old, gray = too old.
+- Same two-row battery layout as 0.1.x, one block per service.
+- `howmuchusage-probe` CLI for checking connections.
+
 ## 0.1.2
 
 Local snapshot clarity update.

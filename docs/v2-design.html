@@ -1,0 +1,348 @@
+<title>Howmuchusage v2 설계</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #1a1f1c;
+  --muted: #5d6862;
+  --line: #d9dfda;
+  --accent: #2d5fcf;
+  --good: #23954f;
+  --warn: #c99a06;
+  --crit: #d23c32;
+  --stale: #97a19b;
+  --bar-track: rgba(90, 104, 97, 0.18);
+  --menubar: #e4e8e5;
+  --display: "Instrument Sans", "IBM Plex Sans KR", system-ui, sans-serif;
+  --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111513;
+    --surface: #1a1f1c;
+    --ink: #e5ebe7;
+    --muted: #9aa69f;
+    --line: #2c3430;
+    --accent: #7ea2ff;
+    --good: #3cc26f;
+    --warn: #e6b82a;
+    --crit: #ff6a5e;
+    --stale: #6c7670;
+    --bar-track: rgba(200, 214, 206, 0.16);
+    --menubar: #232a26;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111513;
+  --surface: #1a1f1c;
+  --ink: #e5ebe7;
+  --muted: #9aa69f;
+  --line: #2c3430;
+  --accent: #7ea2ff;
+  --good: #3cc26f;
+  --warn: #e6b82a;
+  --crit: #ff6a5e;
+  --stale: #6c7670;
+  --bar-track: rgba(200, 214, 206, 0.16);
+  --menubar: #232a26;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 0 16px;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 32px 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.01em; }
+h2 { font-size: 20px; }
+h3 { font-size: 15px; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 16px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+a { color: var(--accent); }
+
+/* Menu bar simulator */
+.sim { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.menubar { background: var(--menubar); display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding: 6px 14px; min-height: 40px; overflow-x: auto; }
+.menubar .clock { font-family: var(--display); font-size: 13px; color: var(--muted); white-space: nowrap; }
+.blocks { display: flex; gap: 12px; }
+.block { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 6px; }
+.tag { font-family: var(--mono); font-weight: 700; font-size: 10px; color: var(--muted); grid-row: span 2; }
+.row { display: grid; grid-template-columns: 26px 44px 30px; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.row .pct { text-align: right; }
+.bar { height: 4px; border-radius: 2px; background: var(--bar-track); position: relative; overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; }
+.row.stale { color: var(--stale); }
+.controls { padding: 16px 18px 18px; display: grid; gap: 14px; }
+.control { display: grid; gap: 6px; }
+.control label { font-size: 13px; font-weight: 600; }
+.control output { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.state-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--ink); font: 600 12px var(--body); padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; color: var(--muted); font: 600 14px var(--body); padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.panel { display: grid; gap: 16px; padding-top: 6px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13.5px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.chip.official { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.chip.unofficial { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.chip.passive { background: color-mix(in srgb, var(--stale) 22%, transparent); color: var(--muted); }
+
+/* Architecture */
+.arch { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.layer { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.layer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
+
+/* Checklist */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checklist li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.checklist input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--good); }
+.checklist .cmd { display: block; margin-top: 4px; font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.checklist li.done { opacity: 0.6; }
+.progress { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.note { border-left: 3px solid var(--warn); padding: 8px 12px; background: var(--surface); border-radius: 0 8px 8px 0; font-size: 13.5px; }
+@media (prefers-reduced-motion: no-preference) { .bar i { transition: width .3s ease, background-color .3s ease; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <span class="eyebrow">Howmuchusage · v2 · 2026-09-24</span>
+    <h1>Claude + Codex 사용량, 어느 기기에서 쓰든 맥 메뉴바에</h1>
+    <p class="lede">v0.1은 맥의 로컬 Codex 로그만 읽어서 아이폰·웹 사용량을 볼 수 없었습니다. v2는 각 서비스에 <strong>계정 전체 사용량</strong>을 직접 물어보고, 값이 얼마나 최신인지를 화면에 그대로 드러냅니다.</p>
+  </header>
+
+  <section class="sim" aria-label="메뉴바 표시 시뮬레이터">
+    <div class="menubar">
+      <div class="blocks" id="blocks"></div>
+      <span class="clock">Thu 20:14</span>
+    </div>
+    <div class="controls">
+      <div class="state-line">
+        <span class="pill" id="claudePill"></span>
+        <span class="pill" id="codexPill"></span>
+      </div>
+      <div class="control">
+        <label for="age">마지막으로 서버 값을 받은 뒤 지난 시간</label>
+        <input id="age" type="range" min="0" max="1200" step="15" value="40">
+        <output id="ageOut" for="age"></output>
+      </div>
+      <div class="control">
+        <label for="used">Claude 5시간 창 사용률</label>
+        <input id="used" type="range" min="0" max="100" step="1" value="36">
+        <output id="usedOut" for="used"></output>
+      </div>
+      <div class="control">
+        <span style="font-size:13px;font-weight:600">표시 모드</span>
+        <div class="seg" role="group" aria-label="표시 모드">
+          <button type="button" data-mode="both" aria-pressed="true">Both</button>
+          <button type="button" data-mode="claude" aria-pressed="false">Claude</button>
+          <button type="button" data-mode="codex" aria-pressed="false">Codex</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted)">슬라이더로 시간을 흘려 보세요. 폴링이 정상이면 <code>5h</code>, 몇 분 밀리면 <code>~5h</code>, 15분이 넘으면 회색이 됩니다. 남은 10% 이하 노랑, 5% 이하 빨강 기준은 v0.1과 같습니다.</p>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="설계 섹션">
+    <button role="tab" id="tab-sources" aria-controls="sources" aria-selected="true">데이터 소스</button>
+    <button role="tab" id="tab-arch" aria-controls="arch" aria-selected="false">구조</button>
+    <button role="tab" id="tab-poll" aria-controls="poll" aria-selected="false">업데이트 주기</button>
+    <button role="tab" id="tab-devices" aria-controls="devices" aria-selected="false">기기별 반영</button>
+    <button role="tab" id="tab-verify" aria-controls="verify" aria-selected="false">맥 검증</button>
+  </nav>
+
+  <section class="panel" id="sources" role="tabpanel" aria-labelledby="tab-sources">
+    <p>모든 소스는 결국 서버가 계산한 값을 전달합니다. 그래서 여러 소스가 있으면 <strong>가장 최근에 관측된 값</strong>을 씁니다. 동시에 관측됐다면 계정에 직접 물어본 값이 우선입니다.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>서비스</th><th>소스</th><th>공식성</th><th>범위</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>Codex</td><td><code>codex app-server</code><br><code>account/rateLimits/read</code></td><td><span class="chip official">공식 프로토콜</span></td><td>모든 기기</td><td>push 알림 <code>account/rateLimits/updated</code>, ChatGPT 로그인 <code>account/login/start</code>. 토큰 갱신은 Codex가 처리</td></tr>
+          <tr><td>Codex</td><td><code>~/.codex/sessions/**/*.jsonl</code></td><td><span class="chip passive">수동 소스</span></td><td>이 맥만</td><td>app-server를 못 쓸 때 fallback</td></tr>
+          <tr><td>Claude</td><td><code>GET /api/oauth/usage</code><br>Claude Code 키체인 로그인</td><td><span class="chip unofficial">비공식</span></td><td>모든 기기</td><td><code>five_hour</code>, <code>seven_day</code>, 모델별 주간 한도. 429 가능성 때문에 보수적으로 조회</td></tr>
+          <tr><td>Claude</td><td>Claude Code statusline <code>rate_limits</code></td><td><span class="chip official">공식 문서</span></td><td>이 맥만</td><td>선택 기능. 기존 statusline을 그대로 이어서 실행</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">MCP나 커넥터는 모델이 도구를 쓰는 통로라서 구독 사용량을 알려주지 않습니다. 그래서 v2는 각 도구가 스스로 쓰는 계정 사용량 통로를 사용합니다.</p>
+  </section>
+
+  <section class="panel" id="arch" role="tabpanel" aria-labelledby="tab-arch" hidden>
+    <div class="arch">
+      <div class="layer"><span class="eyebrow">UsageCore</span><h3>모델 · 파서 · 정책</h3><ul><li>공통 <code>UsageSnapshot</code> / <code>UsageWindow</code></li><li>app-server, OAuth usage, statusline, 세션 로그 파서</li><li><code>Freshness</code> live / recent / stale</li><li><code>PollPolicy</code> 적응형 주기와 backoff</li></ul></div>
+      <div class="layer"><span class="eyebrow">UsageProviders</span><h3>실제 연결</h3><ul><li><code>CodexAppServerClient</code>: stdio JSON-RPC, 20초 timeout, 죽으면 재시작</li><li><code>ClaudeCredentialStore</code>: <code>/usr/bin/security</code>로 읽기 전용</li><li><code>StatuslineBridge</code>: 설치 전 settings 백업, 해제 시 복원</li></ul></div>
+      <div class="layer"><span class="eyebrow">Howmuchusage.app</span><h3>메뉴바 앱</h3><ul><li>provider별 폴링 루프 + 깨우기 트리거</li><li>원래 2줄 battery 블록을 provider마다</li><li>popover: 상태 · 소스 · 다음 조회 · 연결 버튼</li></ul></div>
+      <div class="layer"><span class="eyebrow">howmuchusage-probe</span><h3>진단 CLI</h3><ul><li>앱과 같은 경로로 각 소스를 점검</li><li><code>--json</code> 출력 지원</li><li>앱 번들 안에도 포함</li></ul></div>
+    </div>
+  </section>
+
+  <section class="panel" id="poll" role="tabpanel" aria-labelledby="tab-poll" hidden>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>Codex</th><th>Claude</th></tr></thead>
+        <tbody>
+          <tr><td>최근 10분 안에 값이 변함</td><td class="num">30 s</td><td class="num">60 s</td></tr>
+          <tr><td>평소</td><td class="num">60 s</td><td class="num">120 s</td></tr>
+          <tr><td>30분 이상 변화 없음</td><td class="num">120 s</td><td class="num">300 s</td></tr>
+          <tr><td>최소 간격 (수동 새로고침 포함)</td><td class="num">10 s</td><td class="num">45 s</td></tr>
+          <tr><td>오류 backoff</td><td class="num">30 s → 15 min</td><td class="num">30 s → 15 min, 429는 Retry-After</td></tr>
+          <tr><td>"Live" 로 인정하는 나이</td><td class="num">≤ 180 s</td><td class="num">≤ 360 s</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>즉시 재조회 트리거: 잠자기 해제, 네트워크 복구, popover 열기, 이 맥의 Codex 로그·Claude statusline 파일 변경, Codex push 알림. 모든 주기에 ±10% jitter를 넣어 요청이 한꺼번에 몰리지 않게 합니다.</p>
+  </section>
+
+  <section class="panel" id="devices" role="tabpanel" aria-labelledby="tab-devices" hidden>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>어디서 사용</th><th>반영 경로</th><th>예상 지연</th></tr></thead>
+        <tbody>
+          <tr><td>아이폰 · 아이패드 Claude 앱, claude.ai 웹</td><td>Claude usage API 폴링</td><td class="num">1–5 min</td></tr>
+          <tr><td>맥 Claude Code</td><td>폴링 + statusline 파일 변경 트리거</td><td class="num">수 초–1 min</td></tr>
+          <tr><td>ChatGPT 앱/웹의 Codex, Codex cloud</td><td>app-server 폴링</td><td class="num">30 s–2 min</td></tr>
+          <tr><td>맥 Codex CLI · 앱</td><td>app-server push + 로그 변경 트리거</td><td class="num">수 초</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">알려진 한계: 맥의 Claude Code를 오래 안 열어 로그인 토큰이 만료되면 Claude 값 갱신이 멈춥니다. 앱은 토큰을 직접 갱신하지 않고, Claude Code를 한 번 열면 1–2분 안에 자동 복구합니다. Phase 2에서 claude.ai 웹 로그인 소스를 추가해 이 한계를 없앨 예정입니다.</p>
+  </section>
+
+  <section class="panel" id="verify" role="tabpanel" aria-labelledby="tab-verify" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <p>실제 계정이 필요한 확인 항목입니다. 체크 상태는 이 브라우저에만 저장됩니다.</p>
+      <span class="progress" id="progress"></span>
+    </div>
+    <ul class="checklist" id="checklist">
+      <li><input type="checkbox" id="c1"><label for="c1">Codex app-server 연결과 5h/1w 값 확인<span class="cmd">swift run howmuchusage-probe codex</span></label></li>
+      <li><input type="checkbox" id="c2"><label for="c2">Claude 키체인 팝업에서 "항상 허용" 후 값 확인<span class="cmd">swift run howmuchusage-probe claude</span></label></li>
+      <li><input type="checkbox" id="c3"><label for="c3">앱 번들 빌드 후 메뉴바에 CL / CX 블록 표시 확인<span class="cmd">Scripts/build-app.sh && open dist/Howmuchusage.app</span></label></li>
+      <li><input type="checkbox" id="c4"><label for="c4">아이폰에서 Claude 사용 후 5분 안에 메뉴바 값 변화 확인</label></li>
+      <li><input type="checkbox" id="c5"><label for="c5">ChatGPT 앱(또는 웹)의 Codex 사용 후 2분 안에 값 변화 확인</label></li>
+      <li><input type="checkbox" id="c6"><label for="c6">맥 잠자기 해제 직후 값이 자동으로 다시 조회되는지 확인</label></li>
+      <li><input type="checkbox" id="c7"><label for="c7">statusline 연동을 켜고 끈 뒤 기존 Claude Code statusline이 그대로인지 확인<span class="cmd">~/.claude/settings.json.howmuchusage-backup</span></label></li>
+      <li><input type="checkbox" id="c8"><label for="c8">Claude usage API의 429 빈도 기록 (잦으면 Claude 기본 주기 상향)</label></li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  var mode = "both";
+  var ageEl = document.getElementById("age");
+  var usedEl = document.getElementById("used");
+
+  function level(remaining, stale) {
+    if (stale) return "var(--stale)";
+    if (remaining <= 5) return "var(--crit)";
+    if (remaining <= 10) return "var(--warn)";
+    return "var(--good)";
+  }
+  function freshness(age, liveWindow) {
+    if (age <= liveWindow) return "live";
+    if (age <= 900) return "recent";
+    return "stale";
+  }
+  function fmtAge(s) {
+    if (s < 10) return "just now";
+    if (s < 60) return s + "s ago";
+    return Math.floor(s / 60) + "m ago";
+  }
+  function row(label, remaining, fresh) {
+    var stale = fresh === "stale";
+    var approx = fresh !== "live";
+    return '<div class="row' + (stale ? " stale" : "") + '"><span>' + (approx ? "~" : "") + label +
+      '</span><span class="bar"><i style="width:' + remaining + "%;background:" + level(remaining, stale) +
+      '"></i></span><span class="pct">' + remaining + "%</span></div>";
+  }
+  function block(tag, rows) {
+    return '<div class="block"><span class="tag">' + tag + '</span><div>' + rows + "</div></div>";
+  }
+  function pill(el, name, fresh, age) {
+    var colors = { live: "var(--good)", recent: "var(--warn)", stale: "var(--stale)" };
+    var label = fresh === "live" ? "Live" : fresh === "recent" ? "~ Recent" : "~ Old";
+    el.innerHTML = '<span class="dot" style="background:' + colors[fresh] + '"></span>' + name + " · " + label + " · " + fmtAge(age);
+  }
+  function render() {
+    var age = Number(ageEl.value);
+    var used = Number(usedEl.value);
+    var claudeFresh = freshness(age, 360);
+    var codexFresh = freshness(age, 180);
+    var html = "";
+    if (mode !== "codex") html += block("CL", row("5h", 100 - used, claudeFresh) + row("1w", 82, claudeFresh));
+    if (mode !== "claude") html += block("CX", row("5h", 41, codexFresh) + row("1w", 57, codexFresh));
+    document.getElementById("blocks").innerHTML = html;
+    document.getElementById("ageOut").textContent = age < 60 ? age + "초" : Math.floor(age / 60) + "분 " + (age % 60) + "초";
+    document.getElementById("usedOut").textContent = used + "% 사용 → " + (100 - used) + "% 남음";
+    pill(document.getElementById("claudePill"), "Claude", claudeFresh, age);
+    pill(document.getElementById("codexPill"), "Codex", codexFresh, age);
+  }
+  ageEl.addEventListener("input", render);
+  usedEl.addEventListener("input", render);
+  document.querySelectorAll(".seg button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      mode = b.dataset.mode;
+      document.querySelectorAll(".seg button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      render();
+    });
+  });
+  render();
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t) { t.addEventListener("click", function () { select(t); }); });
+  var hash = location.hash.replace("#", "");
+  var initial = tabs.filter(function (t) { return t.getAttribute("aria-controls") === hash; })[0];
+  if (initial) select(initial);
+
+  var key = "howmuchusage-v2-checklist";
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch (e) { saved = {}; }
+  var boxes = Array.prototype.slice.call(document.querySelectorAll("#checklist input"));
+  function sync() {
+    var done = 0;
+    boxes.forEach(function (b) { b.closest("li").classList.toggle("done", b.checked); if (b.checked) done++; });
+    document.getElementById("progress").textContent = done + " / " + boxes.length + " 확인됨";
+  }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.id];
+    b.addEventListener("change", function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(key, JSON.stringify(saved)); } catch (e) {}
+      sync();
+    });
+  });
+  sync();
+})();
+</script>
