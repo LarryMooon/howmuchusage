@@ -16,6 +16,19 @@ red at 5% left, gray when the value is too old to trust.
 > never saw usage from other devices. v2 asks each service for your
 > **account-level** usage instead. The old 0.1.x downloads stay in `Downloads/`.
 
+## Install
+
+Paste into Terminal on your Mac (macOS 13+, Apple Silicon or Intel):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/claude/intelligent-bohr-u24qu4/Scripts/install.sh | bash
+```
+
+It downloads the CI-built zip from `Downloads/`, checks its SHA-256, quits any
+running copy (0.1.x included), replaces `/Applications/Howmuchusage.app`, and
+opens it. The build is not notarized yet, so the script clears the download
+flag that would otherwise block the first launch.
+
 ## How it stays current on every device
 
 Usage limits are counted per account on the server. Howmuchusage asks the

@@ -172,3 +172,4 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 - 2026-09-24: GitHub Actions macOS 15 / Swift 6.1.2 CI 첫 실행 통과 (build, 42 tests 0 failures, app bundle, statusline bridge smoke). Node 20 경고로 `actions/checkout@v5`로 올림.
 - 2026-09-24: Compound 기록: `docs/solutions/architecture/usage-must-come-from-account-not-local-logs-2026-09-24.md`.
 - 다음 할 일: 맥에서 실제 계정으로 13절 검증 체크리스트 수행 → 결과를 이 로그에 기록.
+- 2026-09-24: 설치 경로 추가. 클라우드 환경에서는 사용자 맥에 직접 접근 불가 → `.github/workflows/publish-build.yml`(수동 실행 또는 커밋 메시지 `[publish]`)이 macOS에서 universal zip을 만들어 `Downloads/`에 커밋, `Scripts/install.sh` 한 줄 설치. 첫 publish 결과 `Downloads/Howmuchusage-2.0.0-universal-macos.zip` (x86_64 + arm64, SHA-256 확인). Actions artifact 저장소(Azure blob)는 이 환경 네트워크 정책상 다운로드 불가.
