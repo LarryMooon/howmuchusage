@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 5.10
 
 import PackageDescription
 
@@ -8,36 +8,36 @@ let package = Package(
         .macOS(.v13)
     ],
     products: [
-        .library(
-            name: "CodexUsageCore",
-            targets: ["CodexUsageCore"]
-        ),
-        .executable(
-            name: "howmuchusage-probe",
-            targets: ["HowmuchusageProbe"]
-        ),
-        .executable(
-            name: "HowmuchusageMenuBar",
-            targets: ["HowmuchusageMenuBar"]
-        )
+        .library(name: "UsageCore", targets: ["UsageCore"]),
+        .library(name: "UsageProviders", targets: ["UsageProviders"]),
+        .executable(name: "howmuchusage-probe", targets: ["HowmuchusageProbe"]),
+        .executable(name: "Howmuchusage", targets: ["Howmuchusage"])
     ],
     targets: [
-        .target(name: "CodexUsageCore"),
+        // Foundation-only models, parsers, freshness and poll policy.
+        .target(name: "UsageCore"),
+        // Live connections: codex app-server, Claude OAuth usage, local sources.
+        .target(
+            name: "UsageProviders",
+            dependencies: ["UsageCore"]
+        ),
         .executableTarget(
             name: "HowmuchusageProbe",
-            dependencies: ["CodexUsageCore"]
+            dependencies: ["UsageCore", "UsageProviders"]
         ),
         .executableTarget(
-            name: "HowmuchusageMenuBar",
-            dependencies: ["CodexUsageCore"]
+            name: "Howmuchusage",
+            dependencies: ["UsageCore", "UsageProviders"]
         ),
         .testTarget(
-            name: "CodexUsageCoreTests",
-            dependencies: ["CodexUsageCore"],
-            resources: [
-                .copy("Fixtures")
-            ]
+            name: "UsageCoreTests",
+            dependencies: ["UsageCore"],
+            resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "UsageProvidersTests",
+            dependencies: ["UsageCore", "UsageProviders"],
+            resources: [.copy("Fixtures")]
         )
     ]
 )
-

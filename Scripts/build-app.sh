@@ -6,8 +6,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="${DIST_DIR:-$PROJECT_DIR/dist}"
 APP_NAME="${APP_NAME:-Howmuchusage}"
 BUNDLE_ID="${BUNDLE_ID:-com.larrymoon.howmuchusage}"
-VERSION="${VERSION:-0.1.2}"
-BUILD_NUMBER="${BUILD_NUMBER:-3}"
+VERSION="${VERSION:-2.0.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-4}"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -19,13 +19,15 @@ if [[ "${UNIVERSAL:-0}" == "1" ]]; then
   SWIFT_BUILD_ARGS+=(--arch arm64 --arch x86_64)
 fi
 
-swift build "${SWIFT_BUILD_ARGS[@]}" --product HowmuchusageMenuBar
+swift build "${SWIFT_BUILD_ARGS[@]}" --product Howmuchusage
+swift build "${SWIFT_BUILD_ARGS[@]}" --product howmuchusage-probe
 BIN_DIR="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
-cp "$BIN_DIR/HowmuchusageMenuBar" "$MACOS_DIR/$APP_NAME"
-chmod 755 "$MACOS_DIR/$APP_NAME"
+cp "$BIN_DIR/Howmuchusage" "$MACOS_DIR/$APP_NAME"
+cp "$BIN_DIR/howmuchusage-probe" "$MACOS_DIR/howmuchusage-probe"
+chmod 755 "$MACOS_DIR/$APP_NAME" "$MACOS_DIR/howmuchusage-probe"
 
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
