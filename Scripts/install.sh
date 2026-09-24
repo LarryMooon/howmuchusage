@@ -1,10 +1,10 @@
 #!/bin/bash
 # Installs (or updates) Howmuchusage into /Applications and launches it.
 #
-#   curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/claude/intelligent-bohr-u24qu4/Scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/main/Scripts/install.sh | bash
 set -euo pipefail
 
-REF="${HOWMUCHUSAGE_REF:-refs/heads/claude/intelligent-bohr-u24qu4}"
+REF="${HOWMUCHUSAGE_REF:-refs/heads/main}"
 VERSION="${HOWMUCHUSAGE_VERSION:-2.0.0}"
 BASE="https://raw.githubusercontent.com/LarryMooon/howmuchusage/$REF/Downloads"
 ZIP="Howmuchusage-$VERSION-universal-macos.zip"

@@ -21,13 +21,29 @@ red at 5% left, gray when the value is too old to trust.
 Paste into Terminal on your Mac (macOS 13+, Apple Silicon or Intel):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/claude/intelligent-bohr-u24qu4/Scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/main/Scripts/install.sh | bash
 ```
 
 It downloads the CI-built zip from `Downloads/`, checks its SHA-256, quits any
 running copy (0.1.x included), replaces `/Applications/Howmuchusage.app`, and
-opens it. The build is not notarized yet, so the script clears the download
-flag that would otherwise block the first launch.
+opens it. Run the same command again to update. The build is not notarized
+yet, so the script clears the download flag that would otherwise block the
+first launch.
+
+Manual download:
+[Howmuchusage-2.0.0-universal-macos.zip](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.0.0-universal-macos.zip)
+([SHA-256](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.0.0-universal-macos.zip.sha256)).
+
+## What it shows
+
+- **Menu bar**: two rows per service, `5h` session and `1w` weekly, with the
+  percent left and a thin battery bar. `CL` = Claude, `CX` = Codex.
+- **Popover**, per service: plan, freshness and source, reset times, and
+  - Claude per-model weekly caps (for example *Weekly · Fable*),
+  - Claude cloud session credits (`$235.28 of $250 left · expires in …`),
+  - Codex credits when the account has them.
+- Display mode (Both / Claude / Codex), Launch at Login, and links to the
+  official usage pages.
 
 ## How it stays current on every device
 
@@ -55,9 +71,14 @@ Refresh schedule adapts automatically:
 | Menu bar | Meaning |
 |---|---|
 | `5h 64%` | Live: fetched within the normal polling window |
-| `~5h 64%` | A few minutes old, or a window reset passed and 100% is inferred until the next read |
+| `~5h 64%` | A few minutes old (missed polls or a passive source) |
 | gray `~5h 64%` | Older than 15 minutes — check your connection |
+| `~5h --` | The window reset after the last read; waiting for a fresh value |
 | `5h --` | Not connected yet |
+
+A reset is only assumed to have refilled the quota when it happened within the
+last 5 minutes and the value was not stale. Older resets show `--` rather than
+guessing 100%: usage on other devices may already have started the new window.
 
 The popover shows `● Live · 12s ago`, the source, and the next check time.
 If anything disagrees with the official pages, trust the official pages:
@@ -73,8 +94,10 @@ Open the menu bar item; each service has a one-click setup.
 - Already signed in to the Codex CLI or app? Nothing to do.
 - Otherwise click **Sign in with ChatGPT** — your browser opens, and the
   menu bar updates as soon as sign-in completes.
-- Needs the Codex CLI (`brew install codex`). If it lives somewhere unusual,
-  use **Locate codex…**.
+- Uses the `codex` CLI. It is found in the usual install locations
+  (Homebrew, npm, `~/.local/bin`, `~/.codex/bin`) and also inside the
+  ChatGPT/Codex desktop apps. If none is found, install it with
+  `brew install codex`, or point to it with **Locate codex…**.
 
 **Claude**
 
@@ -102,6 +125,7 @@ Open the menu bar item; each service has a one-click setup.
 swift run howmuchusage-probe          # all sources
 swift run howmuchusage-probe codex
 swift run howmuchusage-probe claude --json
+swift run howmuchusage-probe claude --raw   # unparsed server response (no tokens)
 ```
 
 The built app bundle also contains the probe:
@@ -124,6 +148,16 @@ Scripts/package-release.sh
 CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARIZE=1 NOTARY_PROFILE=howmuchusage-notary Scripts/package-release.sh
 ```
+
+## Continuous integration and releases
+
+- `.github/workflows/ci.yml` runs on every push and pull request on a macOS
+  runner: build, unit tests (including a fake `codex app-server`), app bundle,
+  probe smoke test, and a universal release zip uploaded as an artifact.
+- `.github/workflows/publish-build.yml` builds the universal zip and commits it
+  to `Downloads/`, which is what `Scripts/install.sh` installs. It runs from the
+  Actions tab (workflow_dispatch) or on a push whose commit message contains
+  `[publish]`.
 
 ## Project layout
 

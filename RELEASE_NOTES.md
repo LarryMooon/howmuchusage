@@ -1,15 +1,36 @@
 # Howmuchusage Release Notes
 
-## 2.0.0 (in development, not yet packaged)
+## 2.0.0
 
 Rebuilt from scratch for live Claude + Codex usage across all devices.
 
-- Codex usage from the official `codex app-server` protocol (account-wide, with push updates and ChatGPT sign-in).
-- Claude usage from the account usage endpoint using Claude Code's existing login (read-only), plus an optional Claude Code statusline hint.
-- Adaptive refresh with backoff, wake/network/popover triggers.
-- Freshness shown in the menu bar: plain = live, `~` = a few minutes old, gray = too old.
-- Same two-row battery layout as 0.1.x, one block per service.
-- `howmuchusage-probe` CLI for checking connections.
+- Codex usage from the official `codex app-server` protocol: account-wide values
+  with push updates and ChatGPT sign-in. The `codex` CLI is also found inside
+  the ChatGPT/Codex desktop apps.
+- Claude usage from the account usage endpoint using Claude Code's existing
+  login (read-only), including per-model weekly caps (e.g. Fable) from the
+  `limits` list and cloud session credits.
+- Optional Claude Code statusline hint for instant updates while Claude Code
+  runs on this Mac; the previous statusline keeps working and is restored on
+  removal.
+- Adaptive refresh with backoff and Retry-After, plus wake, network and popover
+  triggers.
+- Freshness in the menu bar: plain = live, `~` = a few minutes old, gray = too
+  old, `--` = reset passed and waiting for a fresh value.
+- Same two-row battery layout as 0.1.x, one block per service, readable on
+  tinted menu bars.
+- `howmuchusage-probe` CLI (`--json`, `--raw`) for checking connections.
+- One-line installer: `Scripts/install.sh`.
+
+Install:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/LarryMooon/howmuchusage/refs/heads/main/Scripts/install.sh | bash
+```
+
+Verified on a Max (Claude) + Plus (Codex) account against the official usage
+pages: session, weekly, Fable weekly, cloud credits and both Codex windows
+match.
 
 ## 0.1.2
 
