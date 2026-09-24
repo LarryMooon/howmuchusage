@@ -69,6 +69,24 @@ final class ClaudeParsingTests: XCTestCase {
         XCTAssertEqual(reset.timeIntervalSince1970, 1_775_890_800.528743, accuracy: 0.001)
     }
 
+    func testRealSeptember2026ResponseMatchesOfficialPage() throws {
+        // Captured from a Max (5x) account; the official page showed session 7%,
+        // weekly all models 100%, Fable 97% used.
+        let snapshot = try ClaudeOAuthUsageParser.snapshot(
+            from: fixture("claude-oauth-usage-2026-09.json"),
+            planName: "Max",
+            observedAt: Date()
+        )
+        XCTAssertEqual(snapshot.session?.remainingPercent, 93)
+        XCTAssertEqual(snapshot.weekly?.remainingPercent, 0)
+        let fable = try XCTUnwrap(snapshot.window(.weeklyModel("Fable")))
+        XCTAssertEqual(fable.remainingPercent, 3)
+        XCTAssertEqual(fable.resetsAt.map { Int($0.timeIntervalSince1970) }, 1_790_258_400)
+        XCTAssertEqual(snapshot.extraWindows.filter(\.isNamedModelLimit).map(\.shortLabel), ["Fable"], "codenames stay hidden")
+        XCTAssertFalse(snapshot.windows.contains { $0.title.contains("Claude Code") }, "usage breakdown rows are not limits")
+        XCTAssertEqual(snapshot.windows.filter { $0.kind == .session }.count, 1, "limits array and legacy keys are not duplicated")
+    }
+
     func testNestedModelLimitsAndCodenamesAreClassified() throws {
         let json = #"""
         {"five_hour": {"utilization": 7, "resets_at": "2026-09-24T13:09:00Z"},

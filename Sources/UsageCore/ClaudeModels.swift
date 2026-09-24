@@ -25,8 +25,15 @@ public enum ClaudeOAuthUsageParser {
             throw ParseError.notJSONObject
         }
 
-        var windows: [UsageWindow] = []
-        collectWindows(in: object, path: [], depth: 0, into: &windows)
+        // 2026 shape: a `limits` array with explicit kinds and scopes (this is
+        // where per-model caps such as Fable live). Older top-level windows
+        // fill in only kinds the array does not cover.
+        var windows = limitsArrayWindows(object["limits"])
+        var legacy: [UsageWindow] = []
+        collectWindows(in: object, path: [], depth: 0, into: &legacy)
+        for window in legacy where !windows.contains(where: { $0.kind == window.kind }) {
+            windows.append(window)
+        }
         guard !windows.isEmpty else { throw ParseError.noWindows }
         windows.sort { order($0.kind) < order($1.kind) }
 
@@ -49,6 +56,46 @@ public enum ClaudeOAuthUsageParser {
         )
     }
 
+    /// Parses `limits: [{kind, percent, resets_at, scope: {model: {display_name}}}]`.
+    static func limitsArrayWindows(_ value: Any?) -> [UsageWindow] {
+        guard let items = value as? [[String: Any]] else { return [] }
+        return items.compactMap { (item: [String: Any]) -> UsageWindow? in
+            guard let percent = JSONValue.double(item["percent"] ?? item["utilization"]) else { return nil }
+            let kindName = (item["kind"] as? String) ?? ""
+            let kind: WindowKind
+            switch kindName {
+            case "session":
+                kind = .session
+            case "weekly_all", "weekly":
+                kind = .weekly
+            default:
+                let scope = item["scope"] as? [String: Any]
+                let label = scopeLabel(scope?["model"]) ?? scopeLabel(scope?["surface"])
+                if kindName.hasPrefix("weekly") {
+                    kind = .weeklyModel(prettyName(label ?? kindName))
+                } else {
+                    kind = .other(prettyName(label ?? kindName))
+                }
+            }
+            let isWeekly = kindName.hasPrefix("weekly")
+            return UsageWindow(
+                kind: kind,
+                usedPercent: percent,
+                resetsAt: JSONValue.date(item["resets_at"]),
+                durationMinutes: kindName == "session" ? 300 : (isWeekly ? 10_080 : nil)
+            )
+        }
+    }
+
+    static func scopeLabel(_ value: Any?) -> String? {
+        if let string = value as? String, !string.isEmpty { return string }
+        guard let object = value as? [String: Any] else { return nil }
+        return labelValue(object) ?? (object["id"] as? String)
+    }
+
+    /// Keys that carry percentages but are not quota windows.
+    static let ignoredKeys: Set<String> = ["extra_usage", "limits", "seven_day_breakdown", "spend"]
+
     static let utilizationKeys = ["utilization", "used_percentage", "used_percent", "percent_used"]
     static let labelKeys = ["display_name", "displayName", "name", "model", "label"]
 
@@ -56,7 +103,7 @@ public enum ClaudeOAuthUsageParser {
     /// Nested objects and arrays (e.g. per-model limits) are searched too.
     static func collectWindows(in object: [String: Any], path: [String], depth: Int, into windows: inout [UsageWindow]) {
         guard depth <= 3 else { return }
-        for key in object.keys.sorted() where key != "extra_usage" {
+        for key in object.keys.sorted() where !ignoredKeys.contains(key) {
             let childPath = path + [key]
             if let entry = object[key] as? [String: Any] {
                 if let window = window(from: entry, path: childPath) {

@@ -1,0 +1,17 @@
+{
+  "amber_cistern": null,
+  "extra_usage": {"credits_ever_enabled": true, "is_enabled": false, "monthly_limit": null, "used_credits": null, "utilization": null, "weekly": null},
+  "five_hour": {"limit_dollars": null, "remaining_dollars": null, "resets_at": "2026-09-24T13:10:00.271117+00:00", "used_dollars": null, "utilization": 7},
+  "iguana_necktie": {"limit_dollars": 250, "remaining_dollars": 235.277049, "resets_at": "2026-11-05T07:59:00+00:00", "used_dollars": 14.722951, "utilization": 5.8891804},
+  "limits": [
+    {"group": "session", "is_active": false, "kind": "session", "percent": 7, "resets_at": "2026-09-24T13:10:00.271117+00:00", "scope": null, "severity": "normal"},
+    {"group": "weekly", "is_active": true, "kind": "weekly_all", "percent": 100, "resets_at": "2026-09-24T14:00:00.271138+00:00", "scope": null, "severity": "critical"},
+    {"group": "weekly", "is_active": false, "kind": "weekly_scoped", "percent": 97, "resets_at": "2026-09-24T14:00:00.271329+00:00", "scope": {"model": {"display_name": "Fable", "id": null}, "surface": null}, "severity": "critical"}
+  ],
+  "nimbus_quill": {"limit_dollars": null, "resets_at": null, "utilization": 0},
+  "seven_day": {"limit_dollars": null, "resets_at": "2026-09-24T14:00:00.271138+00:00", "utilization": 100},
+  "seven_day_breakdown": {"as_of": "2026-09-24T11:31:24.287878+00:00", "rows": [{"display_name": "Claude Code", "key": "claude_code", "percent": 69}, {"display_name": "Chats", "key": "chat", "percent": 0}], "window_started_at": "2026-09-17T14:00:00.271138+00:00"},
+  "seven_day_opus": null,
+  "seven_day_sonnet": null,
+  "spend": {"enabled": false, "percent": 0, "severity": "normal"}
+}
