@@ -187,3 +187,4 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - Codex: ChatGPT.app 번들 안의 codex를 찾아 app-server 연결 성공. Live 5h 3% / 1w 85% = 공식 화면과 일치.
   - Claude `--raw` 결과: 2026년 응답에 `limits` 배열이 추가됨 (`kind`: session / weekly_all / weekly_scoped, `percent`, `scope.model.display_name`). Fable 주간 한도는 여기에만 있다. `iguana_necktie` = 클라우드 세션 크레딧(달러 필드), `seven_day_breakdown` = 서비스별 사용 비중(한도 아님).
   - 수정: `limits` 배열을 1순위로 파싱하고, 기존 top-level 키는 빠진 종류만 보충. breakdown/spend는 창으로 취급하지 않음. 실제 응답을 fixture(`claude-oauth-usage-2026-09.json`)로 회귀 테스트.
+- 2026-09-24: 사용자 피드백 "툴바 회색 글자가 안 보임" → 메뉴바 CL/CX 태그를 labelColor(7.6pt)로, 오래된 값/`--`는 labelColor 60% 불투명도로, 막대 배경도 더 진하게 변경.

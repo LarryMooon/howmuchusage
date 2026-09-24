@@ -135,9 +135,9 @@ final class UsageStatusView: NSView {
         drawText(
             block.tag,
             rect: NSRect(x: originX, y: (bounds.height - 9) / 2, width: Self.tagWidth, height: 9),
-            fontSize: 7,
+            fontSize: 7.6,
             weight: .heavy,
-            color: .secondaryLabelColor,
+            color: .labelColor,
             alignment: .left
         )
 
@@ -156,12 +156,12 @@ final class UsageStatusView: NSView {
 
         guard let line else {
             drawText("\(placeholder) --", rect: NSRect(x: originX + 1, y: textY, width: Self.rowsWidth - 2, height: 8.5),
-                     fontSize: 7.2, weight: .semibold, color: .tertiaryLabelColor, alignment: .left)
+                     fontSize: 7.2, weight: .semibold, color: Self.dimmedText, alignment: .left)
             return
         }
 
         let isStale = line.level == .stale
-        let textColor: NSColor = isStale ? .secondaryLabelColor : .labelColor
+        let textColor: NSColor = isStale ? Self.dimmedText : .labelColor
         drawText(line.displayLabel, rect: NSRect(x: originX + 1, y: textY, width: 22, height: 8.5),
                  fontSize: 7.2, weight: .semibold, color: textColor, alignment: .left)
         drawBar(rect: NSRect(x: originX + 25, y: barY, width: 30, height: barHeight),
@@ -175,13 +175,17 @@ final class UsageStatusView: NSView {
         case .good: return .systemGreen
         case .warning: return .systemYellow
         case .critical: return .systemRed
-        case .stale: return .secondaryLabelColor
+        case .stale: return dimmedText
         }
     }
 
+    /// Old or unknown values: still clearly readable on tinted menu bars,
+    /// just visibly weaker than live values.
+    static var dimmedText: NSColor { NSColor.labelColor.withAlphaComponent(0.6) }
+
     private func drawBar(rect: NSRect, remaining: Int, color: NSColor) {
         let radius = rect.height / 2
-        NSColor.secondaryLabelColor.withAlphaComponent(0.18).setFill()
+        NSColor.labelColor.withAlphaComponent(0.25).setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
 
         let fill = rect.width * CGFloat(max(0, min(100, remaining))) / 100
