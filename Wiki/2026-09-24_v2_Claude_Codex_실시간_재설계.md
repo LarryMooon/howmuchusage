@@ -173,3 +173,13 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 - 2026-09-24: Compound 기록: `docs/solutions/architecture/usage-must-come-from-account-not-local-logs-2026-09-24.md`.
 - 다음 할 일: 맥에서 실제 계정으로 13절 검증 체크리스트 수행 → 결과를 이 로그에 기록.
 - 2026-09-24: 설치 경로 추가. 클라우드 환경에서는 사용자 맥에 직접 접근 불가 → `.github/workflows/publish-build.yml`(수동 실행 또는 커밋 메시지 `[publish]`)이 macOS에서 universal zip을 만들어 `Downloads/`에 커밋, `Scripts/install.sh` 한 줄 설치. 첫 publish 결과 `Downloads/Howmuchusage-2.0.0-universal-macos.zip` (x86_64 + arm64, SHA-256 확인). Actions artifact 저장소(Azure blob)는 이 환경 네트워크 정책상 다운로드 불가.
+- 2026-09-24: **실제 맥 첫 검증** (사용자 스크린샷 + probe 출력)
+  - Claude 5h/주간: 공식 화면과 일치 (93% 남음 / 0% 남음, reset 시각 1분 이내 일치). statusline bridge 정상.
+  - Claude Fable 주간 한도(공식 97% 사용)가 앱에 없음. 대신 API 코드명 `Iguana Necktie`(= 클라우드 세션 크레딧, $237/$250, 만료 시각 일치), `Nimbus Quill`(정체 미상)이 노출됨.
+  - Codex: 사용자 맥에서 `codex` CLI를 못 찾음 → 2일 전 로컬 로그 fallback. 5h reset이 지났다는 이유로 **100%로 추정 표시 (실제 3%)** → 신뢰도 원칙 위반 버그.
+- 2026-09-24: 수정
+  - reset 추정: 5분 이내 + stale 아님일 때만 100% 추정, 그 외에는 `--` (docs/solutions/logic-errors/passed-reset-is-not-full-quota-2026-09-24.md).
+  - Codex 탐색: `~/.codex/bin`, Codex/ChatGPT 앱 번들 내부 검색, 찾은 경로 캐시.
+  - Claude 파서: 중첩 객체/배열과 display_name 계열 필드까지 탐색. `.weeklyModel`만 앱에 표시, 정체 불명 코드명은 probe에서만.
+  - `howmuchusage-probe --raw`: 서버 원본 응답 출력 (Fable 매핑 확정용).
+- 다음 확인 필요: 사용자 맥의 `howmuchusage-probe claude --raw` 결과로 Fable 키 구조 확정, Codex 설치 위치 확인.
