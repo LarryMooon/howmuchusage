@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+          python3 --version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test --skip-build
+
+      - name: App bundle
+        run: |
+          Scripts/build-app.sh
+          plutil -lint dist/Howmuchusage.app/Contents/Info.plist
+          test -x dist/Howmuchusage.app/Contents/MacOS/Howmuchusage
+          test -x dist/Howmuchusage.app/Contents/MacOS/howmuchusage-probe
+
+      - name: Probe smoke test (no accounts on CI)
+        run: |
+          # Every source is expected to be unavailable here; the probe must
+          # still report each one cleanly instead of hanging or crashing.
+          dist/Howmuchusage.app/Contents/MacOS/howmuchusage-probe local || true
+          echo '{"rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1}}}' \
+            | dist/Howmuchusage.app/Contents/MacOS/Howmuchusage --statusline-bridge
+
+      - name: Release zip (universal, unsigned)
+        run: |
+          rm -rf dist
+          Scripts/package-release.sh
+          (cd dist/release && shasum -a 256 -c Howmuchusage-*-universal-macos.zip.sha256)
+          lipo -archs dist/Howmuchusage.app/Contents/MacOS/Howmuchusage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Howmuchusage-macos
+          path: dist/release/Howmuchusage-*-universal-macos.zip*
+          if-no-files-found: error

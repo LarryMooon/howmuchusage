@@ -1,0 +1,44 @@
+{
+  "ordinaryUsageAllowed": true,
+  "rateLimits": {
+    "limitId": "codex",
+    "limitName": null,
+    "normalModelSlug": null,
+    "primary": {"usedPercent": 10, "windowDurationMins": 300, "resetsAt": 1790000000},
+    "secondary": {"usedPercent": 20, "windowDurationMins": 10080, "resetsAt": 1790400000},
+    "credits": null,
+    "individualLimit": null,
+    "spendControlReached": null,
+    "planType": "pro",
+    "rateLimitReachedType": null
+  },
+  "rateLimitsByLimitId": {
+    "codex": {
+      "limitId": "codex",
+      "limitName": null,
+      "normalModelSlug": null,
+      "primary": {"usedPercent": 40, "windowDurationMins": 300, "resetsAt": 1790000000},
+      "secondary": {"usedPercent": 52, "windowDurationMins": 10080, "resetsAt": 1790400000},
+      "credits": {"hasCredits": true, "unlimited": false, "balance": "12.50"},
+      "individualLimit": null,
+      "spendControlReached": null,
+      "planType": "pro",
+      "rateLimitReachedType": null
+    },
+    "codex_bengalfox": {
+      "limitId": "codex_bengalfox",
+      "limitName": "GPT-5.3-Codex-Spark",
+      "normalModelSlug": null,
+      "primary": {"usedPercent": 1, "windowDurationMins": 300, "resetsAt": 1790000000},
+      "secondary": null,
+      "credits": null,
+      "individualLimit": null,
+      "spendControlReached": null,
+      "planType": "pro",
+      "rateLimitReachedType": null
+    }
+  },
+  "rateLimitResetCredits": null,
+  "accountId": "acct_123",
+  "rateLimitUpsell": null
+}

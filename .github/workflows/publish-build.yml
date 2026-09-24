@@ -1,0 +1,40 @@
+name: Publish build
+
+# Builds the universal app zip on macOS and commits it to Downloads/ on the
+# same branch, where Scripts/install.sh downloads it. Runs manually, or on a
+# push whose commit message contains "[publish]".
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "claude/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish]')
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build release zip
+        run: |
+          Scripts/package-release.sh
+          (cd dist/release && shasum -a 256 -c Howmuchusage-*-universal-macos.zip.sha256)
+          lipo -archs dist/Howmuchusage.app/Contents/MacOS/Howmuchusage
+
+      - name: Commit zip to Downloads
+        run: |
+          mkdir -p Downloads
+          cp dist/release/Howmuchusage-*-universal-macos.zip dist/release/Howmuchusage-*-universal-macos.zip.sha256 Downloads/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Downloads
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+          git commit -m "Publish Howmuchusage build from ${GITHUB_SHA::7}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

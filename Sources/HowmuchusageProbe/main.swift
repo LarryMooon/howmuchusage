@@ -1,92 +1,129 @@
-import CodexUsageCore
 import Foundation
+import UsageCore
+import UsageProviders
 
-enum ProbeFormat: String {
-    case json
-    case swiftbar
-    case text
+// Debug CLI: checks each connection exactly the way the menu bar app does.
+//
+//   howmuchusage-probe [all|codex|claude|local] [--json]
+//   howmuchusage-probe [codex|claude] --raw   (unparsed server response)
+
+let arguments = Array(CommandLine.arguments.dropFirst())
+let wantsJSON = arguments.contains("--json")
+let wantsRaw = arguments.contains("--raw")
+let target = arguments.first { !$0.hasPrefix("--") } ?? "all"
+let version = "2.0.0-probe"
+
+guard ["all", "codex", "claude", "local"].contains(target) else {
+    print("usage: howmuchusage-probe [all|codex|claude|local] [--json|--raw]")
+    exit(2)
 }
 
-struct ProbeArguments {
-    var sessionsRoot: URL?
-    var format: ProbeFormat = .json
+ProcessRunner.ignoreSIGPIPE()
 
-    init(arguments: [String]) throws {
-        var iterator = arguments.dropFirst().makeIterator()
-
-        while let argument = iterator.next() {
-            switch argument {
-            case "probe":
-                continue
-            case "--sessions-root":
-                guard let value = iterator.next() else {
-                    throw ArgumentError.missingValue("--sessions-root")
-                }
-                sessionsRoot = URL(fileURLWithPath: NSString(string: value).expandingTildeInPath)
-            case "--format":
-                guard let value = iterator.next() else {
-                    throw ArgumentError.missingValue("--format")
-                }
-                guard let parsed = ProbeFormat(rawValue: value) else {
-                    throw ArgumentError.invalidValue("--format", value)
-                }
-                format = parsed
-            case "--help", "-h":
-                print(Self.help)
-                Foundation.exit(0)
-            default:
-                throw ArgumentError.unknown(argument)
-            }
+if wantsRaw {
+    // Response bodies contain usage numbers and plan metadata only; the
+    // access token is sent in a header and never printed.
+    func pretty(_ data: Data) -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let formatted = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else {
+            return String(decoding: data, as: UTF8.self)
         }
+        return String(decoding: formatted, as: UTF8.self)
     }
-
-    static let help = """
-    howmuchusage-probe [probe] [--format json|swiftbar|text] [--sessions-root PATH]
-
-    Reads local Codex session JSONL files and prints the latest rate_limits snapshot.
-    """
-}
-
-enum ArgumentError: Error, LocalizedError {
-    case missingValue(String)
-    case invalidValue(String, String)
-    case unknown(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingValue(let option):
-            return "Missing value for \(option)"
-        case .invalidValue(let option, let value):
-            return "Invalid value for \(option): \(value)"
-        case .unknown(let argument):
-            return "Unknown argument: \(argument)"
+    do {
+        if target == "all" || target == "claude" {
+            print("== claude /api/oauth/usage")
+            print(pretty(try await ClaudeProvider(appVersion: version, keychainAllowed: true).readRaw()))
         }
+        if target == "all" || target == "codex" {
+            let provider = CodexProvider(clientVersion: version)
+            print("== codex account/rateLimits/read")
+            print(pretty(try await provider.readRaw()))
+            print("(codex: \(provider.executablePath ?? "?"))")
+            provider.shutdown()
+        }
+        exit(0)
+    } catch {
+        print("✗ \((error as? LocalizedError)?.errorDescription ?? String(describing: error))")
+        exit(1)
     }
 }
 
-do {
-    let arguments = try ProbeArguments(arguments: CommandLine.arguments)
-    let reader = CodexUsageReader(
-        sessionRoot: arguments.sessionsRoot ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex")
-            .appendingPathComponent("sessions")
-    )
-    let snapshot = try reader.latestSnapshot()
-
-    switch arguments.format {
-    case .json:
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(ProbeOutput(snapshot: snapshot))
-        print(String(decoding: data, as: UTF8.self))
-    case .swiftbar:
-        print(CodexUsageFormatter.swiftBarOutput(snapshot: snapshot))
-    case .text:
-        print(CodexUsageFormatter.textOutput(snapshot: snapshot))
-    }
-} catch {
-    fputs("howmuchusage-probe: \(error.localizedDescription)\n", stderr)
-    Foundation.exit(2)
+struct ProbeResult: Encodable {
+    let source: String
+    let ok: Bool
+    let error: String?
+    let snapshot: UsageSnapshot?
+    let elapsedSeconds: Double
 }
 
+func measure(_ source: String, _ body: () async throws -> UsageSnapshot?) async -> ProbeResult {
+    let started = Date()
+    do {
+        let snapshot = try await body()
+        return ProbeResult(
+            source: source,
+            ok: snapshot != nil,
+            error: snapshot == nil ? "no data" : nil,
+            snapshot: snapshot,
+            elapsedSeconds: Date().timeIntervalSince(started)
+        )
+    } catch {
+        return ProbeResult(
+            source: source,
+            ok: false,
+            error: (error as? LocalizedError)?.errorDescription ?? String(describing: error),
+            snapshot: nil,
+            elapsedSeconds: Date().timeIntervalSince(started)
+        )
+    }
+}
+
+var results: [ProbeResult] = []
+
+if target == "all" || target == "codex" {
+    let provider = CodexProvider(clientVersion: version)
+    results.append(await measure("codex app-server") { try await provider.read() })
+    provider.shutdown()
+}
+
+if target == "all" || target == "claude" {
+    let provider = ClaudeProvider(appVersion: version, keychainAllowed: true)
+    results.append(await measure("claude account usage API") { try await provider.read() })
+}
+
+if target == "all" || target == "local" {
+    results.append(await measure("codex local session log") { CodexSessionLogSource().latestSnapshot() })
+    results.append(await measure("claude statusline bridge") { StatuslineBridge().latestSnapshot() })
+}
+
+if wantsJSON {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.dateEncodingStrategy = .iso8601
+    let data = try encoder.encode(results)
+    print(String(decoding: data, as: UTF8.self))
+} else {
+    let now = Date()
+    for result in results {
+        let timing = String(format: "%.2fs", result.elapsedSeconds)
+        guard let snapshot = result.snapshot else {
+            print("✗ \(result.source) (\(timing)): \(result.error ?? "unknown error")")
+            continue
+        }
+        let plan = snapshot.planName.map { " · \($0)" } ?? ""
+        let account = snapshot.accountLabel.map { " · \($0)" } ?? ""
+        print("✓ \(result.source) (\(timing))\(plan)\(account) · observed \(UsageFormat.age(since: snapshot.observedAt, now: now))")
+        for window in snapshot.windows {
+            let reset = window.resetsAt.map { "resets in \(UsageFormat.timeUntil($0, now: now)) (\(UsageFormat.resetTime($0)))" } ?? ""
+            print("    \(window.title.padding(toLength: 18, withPad: " ", startingAt: 0)) \(window.remainingPercent)% left  \(reset)")
+        }
+        for credit in snapshot.credits {
+            let expiry = credit.expiresAt.map { " · expires in \(UsageFormat.timeUntil($0, now: now))" } ?? ""
+            print("    \(credit.name.padding(toLength: 18, withPad: " ", startingAt: 0)) \(credit.amountText)\(expiry)")
+        }
+        snapshot.notes.forEach { print("    \($0)") }
+    }
+}
+
+exit(results.contains { $0.ok } ? 0 : 1)

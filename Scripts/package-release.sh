@@ -6,8 +6,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_NAME="${APP_NAME:-Howmuchusage}"
 BUNDLE_ID="${BUNDLE_ID:-com.larrymoon.howmuchusage}"
-VERSION="${VERSION:-0.1.2}"
-BUILD_NUMBER="${BUILD_NUMBER:-3}"
+VERSION="${VERSION:-2.0.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-4}"
 DIST_DIR="${DIST_DIR:-$PROJECT_DIR/dist}"
 RELEASE_DIR="${RELEASE_DIR:-$DIST_DIR/release}"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
@@ -38,6 +38,13 @@ sign_app() {
   fi
 
   echo "Signing $APP_DIR"
+  /usr/bin/codesign \
+    --force \
+    --timestamp \
+    --options runtime \
+    --sign "$CODESIGN_IDENTITY" \
+    "$APP_DIR/Contents/MacOS/howmuchusage-probe"
+
   /usr/bin/codesign \
     --force \
     --timestamp \

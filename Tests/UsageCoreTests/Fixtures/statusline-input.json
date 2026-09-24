@@ -1,0 +1,10 @@
+{
+  "session_id": "abc",
+  "transcript_path": "/Users/me/.claude/projects/x/abc.jsonl",
+  "cwd": "/Users/me/secret-project",
+  "model": {"id": "claude-opus", "display_name": "Opus"},
+  "rate_limits": {
+    "five_hour": {"used_percentage": 23.5, "resets_at": 1738425600},
+    "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600}
+  }
+}
