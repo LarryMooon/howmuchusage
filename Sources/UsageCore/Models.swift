@@ -76,6 +76,13 @@ public struct UsageWindow: Codable, Hashable, Sendable {
         }
     }
 
+    /// Per-model weekly caps are shown in the app; other API-specific
+    /// windows (often internal codenames) are only listed by the probe.
+    public var isNamedModelLimit: Bool {
+        if case .weeklyModel = kind { return true }
+        return false
+    }
+
     public var title: String {
         switch kind {
         case .session: return "\(shortLabel) session"

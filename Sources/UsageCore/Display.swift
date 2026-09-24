@@ -51,34 +51,57 @@ public enum UsageLevel: String, Equatable, Sendable {
 /// One rendered row: `5h [bar] 64%`.
 public struct DisplayLine: Equatable, Sendable {
     public let label: String
-    public let remainingPercent: Int
+    /// `nil` when the current value is unknown (the window reset after the
+    /// last observation and no fresh read has arrived yet).
+    public let remainingPercent: Int?
     /// Shown with a `~` prefix: not a live value.
     public let isApproximate: Bool
-    /// The window reset already passed; 100% is inferred until the next read.
-    public let isInferredReset: Bool
+    /// The window reset after the last observation.
+    public let isResetPassed: Bool
     public let level: UsageLevel
     public let resetsAt: Date?
 
     public var displayLabel: String {
         isApproximate ? "~\(label)" : label
     }
+
+    public var percentText: String {
+        remainingPercent.map { "\($0)%" } ?? "--"
+    }
 }
 
 public enum UsageDisplay {
+    /// A reset this recent, seen from a non-stale value, is assumed to have
+    /// restored the full quota until the next read confirms it. Older resets
+    /// say nothing about current usage, so the value becomes unknown.
+    public static let resetInferenceGrace: TimeInterval = 300
+
     public static func line(
         for window: UsageWindow,
         freshness: Freshness,
         now: Date
     ) -> DisplayLine {
-        let inferredReset = window.isResetPassed(now: now)
-        let remaining = inferredReset ? 100 : window.remainingPercent
-        let approximate = inferredReset || freshness != .live
-        let level: UsageLevel = freshness == .stale ? .stale : .forRemaining(remaining)
+        let resetPassed = window.isResetPassed(now: now)
+        let remaining: Int?
+        if resetPassed {
+            let sinceReset = window.resetsAt.map { now.timeIntervalSince($0) } ?? .infinity
+            remaining = (freshness != .stale && sinceReset <= resetInferenceGrace) ? 100 : nil
+        } else {
+            remaining = window.remainingPercent
+        }
+
+        let level: UsageLevel
+        if freshness == .stale || remaining == nil {
+            level = .stale
+        } else {
+            level = .forRemaining(remaining ?? 0)
+        }
+
         return DisplayLine(
             label: window.shortLabel,
             remainingPercent: remaining,
-            isApproximate: approximate,
-            isInferredReset: inferredReset,
+            isApproximate: resetPassed || freshness != .live,
+            isResetPassed: resetPassed,
             level: level,
             resetsAt: window.resetsAt
         )

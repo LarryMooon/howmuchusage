@@ -61,7 +61,8 @@ struct ProviderSection: View {
                 ForEach([snapshot.session, snapshot.weekly].compactMap { $0 }, id: \.self) { window in
                     BatteryUsageRow(line: UsageDisplay.line(for: window, freshness: freshness, now: store.now), now: store.now)
                 }
-                ForEach(snapshot.extraWindows, id: \.self) { window in
+                // Unlabeled internal limits (API codenames) are left to the probe CLI.
+                ForEach(snapshot.extraWindows.filter(\.isNamedModelLimit), id: \.self) { window in
                     CompactUsageRow(window: window, line: UsageDisplay.line(for: window, freshness: freshness, now: store.now), now: store.now)
                 }
                 ForEach(snapshot.notes, id: \.self) { note in
@@ -137,7 +138,7 @@ struct BatteryUsageRow: View {
                 Text(line.displayLabel)
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .frame(width: 26, alignment: .leading)
-                Text("\(line.remainingPercent)% left")
+                Text(line.remainingPercent.map { "\($0)% left" } ?? "unknown")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(UsageColors.swiftUI(line.level))
@@ -147,12 +148,14 @@ struct BatteryUsageRow: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
-            BatteryBar(remaining: line.remainingPercent, level: line.level, height: 5)
+            BatteryBar(remaining: line.remainingPercent ?? 0, level: line.level, height: 5)
         }
     }
 
     private var resetSummary: String {
-        if line.isInferredReset { return "reset passed · refreshing" }
+        if line.isResetPassed {
+            return line.remainingPercent == nil ? "reset passed · waiting for a fresh read" : "just reset · confirming"
+        }
         guard let resetsAt = line.resetsAt else { return "" }
         return "resets in \(UsageFormat.timeUntil(resetsAt, now: now)) · \(UsageFormat.resetTime(resetsAt))"
     }
@@ -169,8 +172,8 @@ struct CompactUsageRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .frame(width: 96, alignment: .leading)
-            BatteryBar(remaining: line.remainingPercent, level: line.level, height: 3)
-            Text("\(line.remainingPercent)%")
+            BatteryBar(remaining: line.remainingPercent ?? 0, level: line.level, height: 3)
+            Text(line.percentText)
                 .font(.caption2)
                 .monospacedDigit()
                 .frame(width: 32, alignment: .trailing)

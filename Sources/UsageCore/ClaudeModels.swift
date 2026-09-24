@@ -26,21 +26,7 @@ public enum ClaudeOAuthUsageParser {
         }
 
         var windows: [UsageWindow] = []
-        for key in object.keys.sorted() where key != "extra_usage" {
-            guard let entry = object[key] as? [String: Any],
-                  let utilization = JSONValue.double(entry["utilization"]) else {
-                continue
-            }
-            windows.append(
-                UsageWindow(
-                    kind: kind(forKey: key),
-                    usedPercent: utilization,
-                    resetsAt: JSONValue.date(entry["resets_at"]),
-                    durationMinutes: durationMinutes(forKey: key)
-                )
-            )
-        }
-
+        collectWindows(in: object, path: [], depth: 0, into: &windows)
         guard !windows.isEmpty else { throw ParseError.noWindows }
         windows.sort { order($0.kind) < order($1.kind) }
 
@@ -63,27 +49,76 @@ public enum ClaudeOAuthUsageParser {
         )
     }
 
-    static func kind(forKey key: String) -> WindowKind {
-        switch key {
-        case "five_hour": return .session
-        case "seven_day": return .weekly
-        default:
-            if key.hasPrefix("seven_day_") {
-                let model = String(key.dropFirst("seven_day_".count))
-                return .weeklyModel(prettyName(model))
+    static let utilizationKeys = ["utilization", "used_percentage", "used_percent", "percent_used"]
+    static let labelKeys = ["display_name", "displayName", "name", "model", "label"]
+
+    /// Walks the response: any object with a utilization number is a window.
+    /// Nested objects and arrays (e.g. per-model limits) are searched too.
+    static func collectWindows(in object: [String: Any], path: [String], depth: Int, into windows: inout [UsageWindow]) {
+        guard depth <= 3 else { return }
+        for key in object.keys.sorted() where key != "extra_usage" {
+            let childPath = path + [key]
+            if let entry = object[key] as? [String: Any] {
+                if let window = window(from: entry, path: childPath) {
+                    windows.append(window)
+                } else {
+                    collectWindows(in: entry, path: childPath, depth: depth + 1, into: &windows)
+                }
+            } else if let items = object[key] as? [[String: Any]] {
+                for (index, item) in items.enumerated() {
+                    let itemPath = childPath + [labelValue(item) ?? String(index)]
+                    if let window = window(from: item, path: itemPath) {
+                        windows.append(window)
+                    } else {
+                        collectWindows(in: item, path: itemPath, depth: depth + 1, into: &windows)
+                    }
+                }
             }
-            return .other(prettyName(key))
         }
     }
 
-    static func durationMinutes(forKey key: String) -> Int? {
-        if key == "five_hour" { return 300 }
-        if key.hasPrefix("seven_day") { return 10_080 }
+    static func window(from entry: [String: Any], path: [String]) -> UsageWindow? {
+        guard let utilization = utilizationKeys.lazy.compactMap({ JSONValue.double(entry[$0]) }).first else {
+            return nil
+        }
+        return UsageWindow(
+            kind: kind(forPath: path, label: labelValue(entry)),
+            usedPercent: utilization,
+            resetsAt: JSONValue.date(entry["resets_at"] ?? entry["resetsAt"]),
+            durationMinutes: durationMinutes(forPath: path)
+        )
+    }
+
+    static func labelValue(_ entry: [String: Any]) -> String? {
+        labelKeys.lazy.compactMap { entry[$0] as? String }.first { !$0.isEmpty }
+    }
+
+    static func kind(forPath path: [String], label: String? = nil) -> WindowKind {
+        let joined = path.joined(separator: "_")
+        if path == ["five_hour"] { return .session }
+        if path == ["seven_day"] { return .weekly }
+        if joined.hasPrefix("seven_day") || joined.contains("weekly") {
+            if let label { return .weeklyModel(prettyName(label)) }
+            var model = path.last ?? joined
+            if model.hasPrefix("seven_day_") { model = String(model.dropFirst("seven_day_".count)) }
+            return .weeklyModel(prettyName(model))
+        }
+        return .other(prettyName(label ?? joined))
+    }
+
+    static func kind(forKey key: String) -> WindowKind {
+        kind(forPath: [key])
+    }
+
+    static func durationMinutes(forPath path: [String]) -> Int? {
+        let joined = path.joined(separator: "_")
+        if joined.hasPrefix("five_hour") { return 300 }
+        if joined.hasPrefix("seven_day") || joined.contains("weekly") { return 10_080 }
         return nil
     }
 
     static func prettyName(_ raw: String) -> String {
-        raw.split(separator: "_")
+        raw.split(whereSeparator: { $0 == "_" || $0 == "-" || $0 == " " })
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
     }

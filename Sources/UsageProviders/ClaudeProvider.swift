@@ -112,6 +112,16 @@ public struct ClaudeUsageClient: Sendable {
     }
 
     public func fetch(token: String, planName: String?, now: Date = Date()) async throws -> UsageSnapshot {
+        let data = try await fetchRaw(token: token, now: now)
+        do {
+            return try ClaudeOAuthUsageParser.snapshot(from: data, planName: planName, observedAt: now)
+        } catch {
+            throw ClaudeProviderError.badResponse
+        }
+    }
+
+    /// The unparsed response body (contains usage numbers only, no tokens).
+    public func fetchRaw(token: String, now: Date = Date()) async throws -> Data {
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -133,11 +143,7 @@ public struct ClaudeUsageClient: Sendable {
 
         switch http.statusCode {
         case 200:
-            do {
-                return try ClaudeOAuthUsageParser.snapshot(from: data, planName: planName, observedAt: now)
-            } catch {
-                throw ClaudeProviderError.badResponse
-            }
+            return data
         case 401:
             throw ClaudeProviderError.unauthorized
         case 429:
@@ -203,6 +209,13 @@ public final class ClaudeProvider: @unchecked Sendable {
             }
             return try await fetch(with: reloaded, now: now)
         }
+    }
+
+    /// Raw usage response, for diagnostics (`howmuchusage-probe claude --raw`).
+    public func readRaw(now: Date = Date()) async throws -> Data {
+        let credentials = try await self.credentials(reload: true)
+        if credentials.isExpired(now: now) { throw ClaudeProviderError.tokenExpired }
+        return try await client.fetchRaw(token: credentials.accessToken, now: now)
     }
 
     private func fetch(with credentials: ClaudeCredentials, now: Date) async throws -> UsageSnapshot {

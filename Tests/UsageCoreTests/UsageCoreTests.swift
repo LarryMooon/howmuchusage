@@ -69,6 +69,29 @@ final class ClaudeParsingTests: XCTestCase {
         XCTAssertEqual(reset.timeIntervalSince1970, 1_775_890_800.528743, accuracy: 0.001)
     }
 
+    func testNestedModelLimitsAndCodenamesAreClassified() throws {
+        let json = #"""
+        {"five_hour": {"utilization": 7, "resets_at": "2026-09-24T13:09:00Z"},
+         "seven_day": {"utilization": 100, "resets_at": "2026-09-24T14:00:00Z"},
+         "seven_day_by_model": [{"model": "fable", "utilization": 97, "resets_at": "2026-09-24T14:00:00Z"}],
+         "iguana_necktie": {"utilization": 5.2, "resets_at": "2026-11-05T07:59:00Z"},
+         "seven_day_opus": null,
+         "extra_usage": {"is_enabled": false}}
+        """#
+        let snapshot = try ClaudeOAuthUsageParser.snapshot(from: Data(json.utf8), planName: nil, observedAt: Date())
+
+        XCTAssertEqual(snapshot.windows.map(\.kind), [.session, .weekly, .weeklyModel("Fable"), .other("Iguana Necktie")])
+        XCTAssertEqual(snapshot.extraWindows.filter(\.isNamedModelLimit).map(\.shortLabel), ["Fable"])
+        XCTAssertEqual(snapshot.window(.weeklyModel("Fable"))?.remainingPercent, 3)
+        XCTAssertEqual(snapshot.window(.weeklyModel("Fable"))?.durationMinutes, 10_080)
+    }
+
+    func testLabelFieldNamesAWeeklyModelWindow() throws {
+        let json = #"{"seven_day": {"utilization": 10}, "seven_day_x1": {"utilization": 40, "display_name": "Fable"}}"#
+        let snapshot = try ClaudeOAuthUsageParser.snapshot(from: Data(json.utf8), planName: nil, observedAt: Date())
+        XCTAssertEqual(snapshot.window(.weeklyModel("Fable"))?.remainingPercent, 60)
+    }
+
     func testOAuthUsageWithoutWindowsFails() {
         XCTAssertThrowsError(try ClaudeOAuthUsageParser.snapshot(from: Data("{\"extra_usage\":null}".utf8), planName: nil, observedAt: Date()))
     }
@@ -142,12 +165,37 @@ final class DisplayTests: XCTestCase {
         XCTAssertEqual(stale.level, .stale)
     }
 
-    func testPassedResetIsInferredAsFullButApproximate() {
-        let window = UsageWindow(kind: .session, usedPercent: 99, resetsAt: now.addingTimeInterval(-1), durationMinutes: 300)
-        let line = UsageDisplay.line(for: window, freshness: .live, now: now)
+    func testJustPassedResetIsInferredAsFullButApproximate() {
+        let window = UsageWindow(kind: .session, usedPercent: 99, resetsAt: now.addingTimeInterval(-60), durationMinutes: 300)
+        let line = UsageDisplay.line(for: window, freshness: .recent, now: now)
         XCTAssertEqual(line.remainingPercent, 100)
-        XCTAssertTrue(line.isInferredReset)
+        XCTAssertTrue(line.isResetPassed)
         XCTAssertEqual(line.displayLabel, "~5h")
+    }
+
+    func testOldResetMakesValueUnknownInsteadOfFull() {
+        // Regression: a 2-day-old local Codex value (97% used) whose 5h reset
+        // had passed was shown as 100% left while the real value was 3%.
+        let window = UsageWindow(kind: .session, usedPercent: 97, resetsAt: now.addingTimeInterval(-2 * 86_400), durationMinutes: 300)
+        let line = UsageDisplay.line(for: window, freshness: .stale, now: now)
+        XCTAssertNil(line.remainingPercent)
+        XCTAssertEqual(line.percentText, "--")
+        XCTAssertEqual(line.level, .stale)
+        XCTAssertEqual(line.displayLabel, "~5h")
+
+        let staleButRecentReset = UsageDisplay.line(
+            for: UsageWindow(kind: .session, usedPercent: 50, resetsAt: now.addingTimeInterval(-60)),
+            freshness: .stale,
+            now: now
+        )
+        XCTAssertNil(staleButRecentReset.remainingPercent, "a stale value never earns the reset inference")
+
+        let longAfterReset = UsageDisplay.line(
+            for: UsageWindow(kind: .session, usedPercent: 50, resetsAt: now.addingTimeInterval(-301)),
+            freshness: .live,
+            now: now
+        )
+        XCTAssertNil(longAfterReset.remainingPercent)
     }
 
     func testRemainingIsClamped() {

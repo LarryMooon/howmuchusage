@@ -234,6 +234,25 @@ final class StatuslineBridgeTests: XCTestCase {
     }
 }
 
+final class BinaryLocatorTests: XCTestCase {
+    func testFindsCLIInsideDesktopAppBundle() throws {
+        let root = try temporaryDirectory()
+        let resources = root.appendingPathComponent("Codex.app/Contents/Resources/bin")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        let cli = resources.appendingPathComponent("codex")
+        try Data("#!/bin/sh\n".utf8).write(to: cli)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+        // A non-executable file with the same name elsewhere must be ignored.
+        let other = root.appendingPathComponent("ChatGPT.app/Contents/Resources")
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try Data().write(to: other.appendingPathComponent("codex"))
+
+        let found = BinaryLocator.searchAppBundles(for: "codex", appNameHints: ["codex", "chatgpt"], roots: [root])
+        XCTAssertEqual(found?.resolvingSymlinksInPath().path, cli.resolvingSymlinksInPath().path)
+        XCTAssertNil(BinaryLocator.searchAppBundles(for: "codex", appNameHints: ["other"], roots: [root]))
+    }
+}
+
 final class LocalSourceTests: XCTestCase {
     func testSessionLogSourceReadsTodaysDirectory() throws {
         let root = try temporaryDirectory()

@@ -165,8 +165,8 @@ final class UsageStatusView: NSView {
         drawText(line.displayLabel, rect: NSRect(x: originX + 1, y: textY, width: 22, height: 8.5),
                  fontSize: 7.2, weight: .semibold, color: textColor, alignment: .left)
         drawBar(rect: NSRect(x: originX + 25, y: barY, width: 30, height: barHeight),
-                remaining: line.remainingPercent, color: Self.color(for: line.level))
-        drawText("\(line.remainingPercent)%", rect: NSRect(x: originX + 58, y: textY, width: 25, height: 8.5),
+                remaining: line.remainingPercent ?? 0, color: Self.color(for: line.level))
+        drawText(line.percentText, rect: NSRect(x: originX + 58, y: textY, width: 25, height: 8.5),
                  fontSize: 7.2, weight: .semibold, color: textColor, alignment: .right)
     }
 

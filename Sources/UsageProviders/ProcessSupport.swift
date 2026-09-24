@@ -142,6 +142,7 @@ public enum BinaryLocator {
             "/opt/homebrew/bin",
             "/usr/local/bin",
             home.appendingPathComponent(".local/bin").path,
+            home.appendingPathComponent(".codex/bin").path,
             home.appendingPathComponent(".npm-global/bin").path,
             home.appendingPathComponent(".volta/bin").path,
             home.appendingPathComponent(".bun/bin").path,
@@ -173,7 +174,49 @@ public enum BinaryLocator {
         for path in extraCandidates + candidates(for: name) where fileManager.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }
-        return await loginShellLookup(name)
+        if let shellPath = await loginShellLookup(name) {
+            return shellPath
+        }
+        return searchAppBundles(for: name, appNameHints: bundleHints)
+    }
+
+    /// Desktop apps that may ship a CLI inside their bundle.
+    public static let bundleHints: [String] = ["codex", "chatgpt"]
+
+    /// Looks inside `/Applications` and `~/Applications` app bundles whose
+    /// name contains a hint (e.g. Codex.app) for an executable named `name`.
+    public static func searchAppBundles(
+        for name: String,
+        appNameHints: [String],
+        roots: [URL] = [URL(fileURLWithPath: "/Applications"), BinaryLocator.home.appendingPathComponent("Applications")],
+        maxEntriesPerApp: Int = 50_000
+    ) -> URL? {
+        let fileManager = FileManager.default
+        for root in roots {
+            guard let apps = try? fileManager.contentsOfDirectory(atPath: root.path) else { continue }
+            let matching = apps
+                .filter { app in app.hasSuffix(".app") && appNameHints.contains { app.lowercased().contains($0) } }
+                .sorted()
+            for app in matching {
+                let contents = root.appendingPathComponent(app).appendingPathComponent("Contents")
+                guard let enumerator = fileManager.enumerator(
+                    at: contents,
+                    includingPropertiesForKeys: [.isRegularFileKey, .isExecutableKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
+                ) else { continue }
+                var visited = 0
+                for case let url as URL in enumerator {
+                    visited += 1
+                    if visited > maxEntriesPerApp { break }
+                    guard url.lastPathComponent == name else { continue }
+                    let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isExecutableKey])
+                    if values?.isRegularFile == true, values?.isExecutable == true {
+                        return url
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// Last resort: ask the user's login shell, which loads their PATH setup.

@@ -10,7 +10,7 @@ public enum CodexProviderError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notInstalled:
-            return "Codex CLI not found. Install it (brew install codex) or set its path."
+            return "Codex CLI not found in the usual places or inside Codex/ChatGPT apps. Install it (brew install codex) or locate it."
         case .signedOut:
             return "Not signed in to Codex."
         case .apiKeyAccount:
@@ -34,6 +34,8 @@ public final class CodexProvider: @unchecked Sendable {
     private var trackedLimitID: String?
     private var account: CodexAccountResponseDTO.Account?
     private var executableOverride: String?
+    /// Last discovered `codex`, so bundle searches are not repeated each poll.
+    private var resolvedExecutable: URL?
 
     private let clientVersion: String
     private var onPush: SnapshotHandler?
@@ -56,10 +58,16 @@ public final class CodexProvider: @unchecked Sendable {
         let old: CodexAppServerClient? = locked {
             guard executableOverride != path else { return nil }
             executableOverride = path
+            resolvedExecutable = nil
             defer { client = nil }
             return client
         }
         old?.stop()
+    }
+
+    /// Path of the `codex` executable in use, if one was found.
+    public var executablePath: String? {
+        locked { resolvedExecutable?.path }
     }
 
     public var signedInEmail: String? {
@@ -96,6 +104,12 @@ public final class CodexProvider: @unchecked Sendable {
         return snapshot
     }
 
+    /// Raw `account/rateLimits/read` result, for diagnostics.
+    public func readRaw() async throws -> Data {
+        let client = try await ensureClient()
+        return try await client.request("account/rateLimits/read")
+    }
+
     /// Starts ChatGPT sign-in through app-server and returns the browser URL.
     /// Completion arrives via the `loginCompleted` handler.
     public func startChatGPTLogin() async throws -> URL {
@@ -129,11 +143,14 @@ public final class CodexProvider: @unchecked Sendable {
 
         if let existing, existing.isRunning { return existing }
 
-        guard let executable = await BinaryLocator.locate(
-            "codex",
-            override: override,
-            extraCandidates: ["/Applications/Codex.app/Contents/Resources/codex"]
-        ) else {
+        let executable: URL
+        if override == nil, let cached = locked({ resolvedExecutable }),
+           FileManager.default.isExecutableFile(atPath: cached.path) {
+            executable = cached
+        } else if let found = await BinaryLocator.locate("codex", override: override) {
+            executable = found
+            locked { resolvedExecutable = found }
+        } else {
             throw CodexProviderError.notInstalled
         }
 
