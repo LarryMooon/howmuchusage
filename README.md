@@ -4,10 +4,18 @@ A tiny macOS menu bar app that shows how much **Claude** and **Codex** usage
 you have left — updated automatically, no matter where you use them (Mac,
 web, iPhone, iPad).
 
-```text
-CL  5h [=======   ] 64%    CX  5h [====      ] 41%
-    1w [========= ] 88%        1w [======    ] 57%
-```
+<p align="center">
+  <img src="docs/images/menubar-closeup.png" alt="Howmuchusage in the macOS menu bar: Claude (CL) 5h 93% and 1w 0% left, Codex (CX) 5h 2% and 1w 85% left" width="450">
+</p>
+
+<p align="center">
+  <img src="docs/images/menubar-full.png" alt="Howmuchusage sitting next to other menu bar items on a Mac" width="920">
+</p>
+
+`CL` is Claude and `CX` is Codex. Each block shows the 5-hour session (`5h`)
+and weekly (`1w`) quota. In the screenshot, Claude's weekly quota is used up
+(0%) while its session still has 93% left, and Codex has 2% of its session left
+with 85% of the week remaining.
 
 Numbers are always **remaining** quota. Green by default, yellow at 10% left,
 red at 5% left, gray when the value is too old to trust.
