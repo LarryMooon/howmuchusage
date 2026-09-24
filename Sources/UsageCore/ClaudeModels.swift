@@ -52,8 +52,32 @@ public enum ClaudeOAuthUsageParser {
             planName: planName,
             source: .claudeOAuth,
             observedAt: observedAt,
-            notes: notes
+            notes: notes,
+            credits: creditBalances(in: object)
         )
+    }
+
+    /// Top-level objects carrying a dollar limit and remaining dollars. Their
+    /// keys are internal codenames (2026: `iguana_necktie` = cloud session
+    /// credits), so they are recognized by shape, not by name.
+    static func creditBalances(in object: [String: Any]) -> [CreditBalance] {
+        let candidates = object.keys.sorted().compactMap { key -> (Double, Double, Date?)? in
+            guard !ignoredKeys.contains(key),
+                  let entry = object[key] as? [String: Any],
+                  let limit = JSONValue.double(entry["limit_dollars"]), limit > 0,
+                  let remaining = JSONValue.double(entry["remaining_dollars"]) else {
+                return nil
+            }
+            return (limit, remaining, JSONValue.date(entry["resets_at"]))
+        }
+        return candidates.enumerated().map { index, value in
+            CreditBalance(
+                name: candidates.count == 1 ? "Cloud credits" : "Cloud credits \(index + 1)",
+                limitDollars: value.0,
+                remainingDollars: value.1,
+                expiresAt: value.2
+            )
+        }
     }
 
     /// Parses `limits: [{kind, percent, resets_at, scope: {model: {display_name}}}]`.

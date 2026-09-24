@@ -144,6 +144,8 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
     public var observedAt: Date
     /// Short extra facts such as credit balance or extra-usage state.
     public var notes: [String]
+    /// Dollar-denominated balances (e.g. Claude cloud session credits).
+    public var credits: [CreditBalance]
 
     public init(
         provider: Provider,
@@ -152,7 +154,8 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
         accountLabel: String? = nil,
         source: SourceKind,
         observedAt: Date,
-        notes: [String] = []
+        notes: [String] = [],
+        credits: [CreditBalance] = []
     ) {
         self.provider = provider
         self.windows = windows
@@ -161,6 +164,7 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
         self.source = source
         self.observedAt = observedAt
         self.notes = notes
+        self.credits = credits
     }
 
     public func window(_ kind: WindowKind) -> UsageWindow? {
@@ -211,5 +215,29 @@ public enum PlanNames {
                 .map { $0.prefix(1).uppercased() + $0.dropFirst() }
                 .joined(separator: " ")
         }
+    }
+}
+
+/// A prepaid or included dollar balance with an expiry.
+public struct CreditBalance: Codable, Hashable, Sendable {
+    public var name: String
+    public var limitDollars: Double
+    public var remainingDollars: Double
+    public var expiresAt: Date?
+
+    public init(name: String, limitDollars: Double, remainingDollars: Double, expiresAt: Date?) {
+        self.name = name
+        self.limitDollars = limitDollars
+        self.remainingDollars = remainingDollars
+        self.expiresAt = expiresAt
+    }
+
+    public var remainingPercent: Int {
+        guard limitDollars > 0 else { return 0 }
+        return Int(max(0, min(100, (remainingDollars / limitDollars * 100).rounded())))
+    }
+
+    public var amountText: String {
+        String(format: "$%.2f of $%.0f left", remainingDollars, limitDollars)
     }
 }

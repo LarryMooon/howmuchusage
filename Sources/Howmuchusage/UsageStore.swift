@@ -333,6 +333,7 @@ final class UsageStore: ObservableObject {
             var merged = chosen
             if merged.planName == nil { merged.planName = incoming.planName ?? previous?.planName }
             if merged.accountLabel == nil { merged.accountLabel = incoming.accountLabel ?? previous?.accountLabel }
+            if merged.credits.isEmpty { merged.credits = incoming.credits.isEmpty ? (previous?.credits ?? []) : incoming.credits }
             let changed = merged.hasDifferentUsage(than: previous)
             state.snapshot = merged
             if countsAsPoll {

@@ -65,6 +65,9 @@ struct ProviderSection: View {
                 ForEach(snapshot.extraWindows.filter(\.isNamedModelLimit), id: \.self) { window in
                     CompactUsageRow(window: window, line: UsageDisplay.line(for: window, freshness: freshness, now: store.now), now: store.now)
                 }
+                ForEach(snapshot.credits, id: \.self) { credit in
+                    CreditRow(credit: credit, now: store.now)
+                }
                 ForEach(snapshot.notes, id: \.self) { note in
                     Text(note).font(.caption2).foregroundStyle(.secondary)
                 }
@@ -387,5 +390,35 @@ enum UsageColors {
         case .critical: return .red
         case .stale: return .secondary
         }
+    }
+}
+
+struct CreditRow: View {
+    let credit: CreditBalance
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(credit.name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 96, alignment: .leading)
+                BatteryBar(remaining: credit.remainingPercent, level: .forRemaining(credit.remainingPercent), height: 3)
+                Text("\(credit.remainingPercent)%")
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .frame(width: 32, alignment: .trailing)
+            }
+            Text(detail)
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var detail: String {
+        guard let expiresAt = credit.expiresAt else { return credit.amountText }
+        return "\(credit.amountText) · expires in \(UsageFormat.timeUntil(expiresAt, now: now))"
     }
 }

@@ -85,6 +85,13 @@ final class ClaudeParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.extraWindows.filter(\.isNamedModelLimit).map(\.shortLabel), ["Fable"], "codenames stay hidden")
         XCTAssertFalse(snapshot.windows.contains { $0.title.contains("Claude Code") }, "usage breakdown rows are not limits")
         XCTAssertEqual(snapshot.windows.filter { $0.kind == .session }.count, 1, "limits array and legacy keys are not duplicated")
+
+        let credit = try XCTUnwrap(snapshot.credits.first)
+        XCTAssertEqual(snapshot.credits.count, 1, "only objects with a dollar limit count as credits")
+        XCTAssertEqual(credit.name, "Cloud credits")
+        XCTAssertEqual(credit.amountText, "$235.28 of $250 left")
+        XCTAssertEqual(credit.remainingPercent, 94)
+        XCTAssertEqual(credit.expiresAt, ISO8601.parse("2026-11-05T07:59:00+00:00"))
     }
 
     func testNestedModelLimitsAndCodenamesAreClassified() throws {

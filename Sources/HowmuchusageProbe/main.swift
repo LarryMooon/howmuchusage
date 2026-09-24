@@ -118,6 +118,10 @@ if wantsJSON {
             let reset = window.resetsAt.map { "resets in \(UsageFormat.timeUntil($0, now: now)) (\(UsageFormat.resetTime($0)))" } ?? ""
             print("    \(window.title.padding(toLength: 18, withPad: " ", startingAt: 0)) \(window.remainingPercent)% left  \(reset)")
         }
+        for credit in snapshot.credits {
+            let expiry = credit.expiresAt.map { " · expires in \(UsageFormat.timeUntil($0, now: now))" } ?? ""
+            print("    \(credit.name.padding(toLength: 18, withPad: " ", startingAt: 0)) \(credit.amountText)\(expiry)")
+        }
         snapshot.notes.forEach { print("    \($0)") }
     }
 }
