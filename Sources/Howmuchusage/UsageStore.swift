@@ -169,6 +169,37 @@ final class UsageStore: ObservableObject {
         Provider.allCases.forEach { kick($0, after: delay) }
     }
 
+    /// Short feedback shown under the popover header after a manual refresh.
+    @Published private(set) var refreshNote: String?
+    private var refreshNoteTask: Task<Void, Never>?
+
+    var isAnyRefreshing: Bool {
+        states.values.contains { $0.isRefreshing }
+    }
+
+    /// Manual refresh with visible feedback. Services polled too recently
+    /// wait out their minimum interval; the note says how long.
+    func refreshNow() {
+        let now = Date()
+        var waiting: [String] = []
+        for provider in settings.displayMode.providers {
+            let wait = PollPolicy.for(provider).waitBeforeManualRequest(state: state(for: provider).poll, now: now)
+            if wait >= 1 {
+                waiting.append("\(provider.displayName) in \(UsageFormat.duration(wait))")
+            }
+        }
+        kickAll()
+        refreshNote = waiting.isEmpty
+            ? "Checking now…"
+            : "Checking now · \(waiting.joined(separator: ", ")) (rate limit)"
+        refreshNoteTask?.cancel()
+        refreshNoteTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.refreshNote = nil
+        }
+    }
+
     func popoverOpened() {
         now = Date()
         kickAll()

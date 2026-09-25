@@ -15,12 +15,29 @@ struct UsagePopover: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                 Spacer()
                 Button {
-                    store.kickAll()
+                    store.refreshNow()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 4) {
+                        if store.isAnyRefreshing {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text("Refresh")
+                    }
+                    .font(.caption)
                 }
-                .buttonStyle(.borderless)
-                .help("Refresh now (respects each service's minimum interval)")
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Check all services now (⌘R). Services checked moments ago wait out their minimum interval.")
+            }
+
+            if let note = store.refreshNote {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
 
             ForEach(settings.displayMode.providers, id: \.self) { provider in
