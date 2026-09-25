@@ -10,6 +10,14 @@ final class StatusItemController: NSObject {
     private let statusView: UsageStatusView
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
+    private var observers: [NSObjectProtocol] = []
+
+    // Auto size: full bars when they fit, numbers only when macOS hides the item.
+    private var autoCompact = false
+    private var lastDowngradeAt: Date?
+    private var lastUpgradeAt: Date?
+    private var failedUpgrades = 0
+    private var fitTimer: Timer?
 
     init(store: UsageStore) {
         self.store = store
@@ -40,6 +48,80 @@ final class StatusItemController: NSObject {
             }
             .store(in: &cancellables)
         render()
+        startFitMonitoring()
+    }
+
+    // MARK: - Auto size
+
+    private var isCompact: Bool {
+        switch store.settings.menuBarSize {
+        case .full: return false
+        case .compact: return true
+        case .auto: return autoCompact
+        }
+    }
+
+    private func startFitMonitoring() {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.checkFit() }
+        })
+        // Another app coming forward changes how much menu bar space is left.
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                // Let the new app's menus settle before trying full size.
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                self?.tryFullSize()
+            }
+        })
+        observers.append(center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.tryFullSize(force: true) }
+        })
+        // Occlusion notifications are not guaranteed for status items; poll lightly as a backstop.
+        let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkFit() }
+        }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        fitTimer = timer
+    }
+
+    /// True when macOS left the item off the visible menu bar for lack of room.
+    private var isHiddenForSpace: Bool {
+        guard NSMenu.menuBarVisible(), let window = statusItem.button?.window else { return false }
+        if !window.occlusionState.contains(.visible) { return true }
+        guard let screen = window.screen ?? NSScreen.main else { return false }
+        return !screen.frame.intersects(window.frame)
+    }
+
+    private func checkFit() {
+        guard store.settings.menuBarSize == .auto, !autoCompact else { return }
+        let now = Date()
+        if isHiddenForSpace {
+            // Hidden again right after trying full size: wait longer next time.
+            if let lastUpgradeAt, now.timeIntervalSince(lastUpgradeAt) < 5 {
+                failedUpgrades = min(failedUpgrades + 1, 5)
+            }
+            autoCompact = true
+            lastDowngradeAt = now
+            lastUpgradeAt = nil
+            render()
+        } else if let lastUpgradeAt, now.timeIntervalSince(lastUpgradeAt) > 5 {
+            // Full size stayed visible: the space is really there.
+            failedUpgrades = 0
+            self.lastUpgradeAt = nil
+        }
+    }
+
+    private func tryFullSize(force: Bool = false) {
+        guard store.settings.menuBarSize == .auto, autoCompact else { return }
+        let cooldown = force ? 0 : 20 * pow(2, Double(failedUpgrades))
+        if let lastDowngradeAt, Date().timeIntervalSince(lastDowngradeAt) < cooldown { return }
+        autoCompact = false
+        lastUpgradeAt = Date()
+        render()
+        // If it does not fit, the next check shrinks it back within a moment.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.checkFit() }
     }
 
     func showPopover() {
@@ -73,8 +155,10 @@ final class StatusItemController: NSObject {
             return UsageStatusView.Block(tag: provider.shortTag, rows: [session, weekly])
         }
 
-        let width = UsageStatusView.width(forBlocks: blocks.count)
+        let compact = isCompact
+        let width = UsageStatusView.width(forBlocks: blocks.count, compact: compact)
         if statusItem.length != width { statusItem.length = width }
+        statusView.compact = compact
         statusView.blocks = blocks
         statusItem.button?.toolTip = tooltip()
     }
@@ -104,15 +188,22 @@ final class UsageStatusView: NSView {
 
     static let tagWidth: CGFloat = 13
     static let rowsWidth: CGFloat = 84
+    static let compactRowsWidth: CGFloat = 22
     static let blockGap: CGFloat = 5
 
-    static func width(forBlocks count: Int) -> CGFloat {
+    static func width(forBlocks count: Int, compact: Bool = false) -> CGFloat {
         let blocks = CGFloat(max(1, count))
-        return blocks * (tagWidth + rowsWidth) + (blocks - 1) * blockGap + 2
+        let rows = compact ? compactRowsWidth : rowsWidth
+        return blocks * (tagWidth + rows) + (blocks - 1) * blockGap + 2
     }
 
     var blocks: [Block] = [] {
         didSet { if blocks != oldValue { needsDisplay = true } }
+    }
+
+    /// Numbers only (no labels or bars) to save menu bar space.
+    var compact = false {
+        didSet { if compact != oldValue { needsDisplay = true } }
     }
 
     var onClick: (() -> Void)?
@@ -127,7 +218,7 @@ final class UsageStatusView: NSView {
         var x: CGFloat = 1
         for block in blocks {
             drawBlock(block, originX: x)
-            x += Self.tagWidth + Self.rowsWidth + Self.blockGap
+            x += Self.tagWidth + (compact ? Self.compactRowsWidth : Self.rowsWidth) + Self.blockGap
         }
     }
 
@@ -151,6 +242,22 @@ final class UsageStatusView: NSView {
         let rowHeight = bounds.height / 2
         let rowY = CGFloat(row) * rowHeight
         let textY = rowY + max(0, (rowHeight - 8.5) / 2)
+
+        if compact {
+            // Row order (top 5h, bottom 1w) carries the meaning; color carries the level.
+            let text: String
+            let color: NSColor
+            if let line {
+                text = (line.isApproximate ? "~" : "") + line.percentText
+                color = line.level == .good ? .labelColor : Self.color(for: line.level)
+            } else {
+                text = "--"
+                color = Self.dimmedText
+            }
+            drawText(text, rect: NSRect(x: originX, y: textY, width: Self.compactRowsWidth, height: 8.5),
+                     fontSize: 7.4, weight: .bold, color: color, alignment: .right)
+            return
+        }
         let barHeight: CGFloat = 3
         let barY = rowY + max(0, (rowHeight - barHeight) / 2)
 

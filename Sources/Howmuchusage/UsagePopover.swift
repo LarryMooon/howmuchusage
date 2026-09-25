@@ -340,6 +340,14 @@ struct SettingsSection: View {
             }
             .pickerStyle(.segmented)
 
+            Picker("Size", selection: $settings.menuBarSize) {
+                ForEach(MenuBarSize.allCases) { size in
+                    Text(size.title).tag(size)
+                }
+            }
+            .pickerStyle(.segmented)
+            .help("Auto shows full bars when they fit and switches to numbers only when macOS would hide the item.")
+
             Toggle("Launch at Login", isOn: Binding(
                 get: { launchAtLogin },
                 set: { setLaunchAtLogin($0) }
