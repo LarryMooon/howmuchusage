@@ -210,3 +210,7 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 원인 후보: 키체인 저장 명령(`security -i`)이 성공했어도 stderr에 뭔가 출력하면 실패로 판단하는 코드. 또는 실제 저장 실패.
   - 수정: 저장 명령 결과와 무관하게 저장소를 다시 읽어 새 토큰이 들어갔으면 성공으로 판단. 실패면 경고에 오류 내용을 보여주되 32자 이상 토큰/hex 문자열은 잘라냄.
   - 로그가 비었던 건 raw.githubusercontent.com 캐시(최대 5분) 때문에 notice 수정 전 빌드가 설치됐을 가능성.
+- 2026-09-26: **치명적 버그 확인** — 자동 갱신 후 키체인의 Claude 로그인 JSON이 2,012자에서 잘림(`security -i` 한 줄 길이 제한 ~4KB, hex로 2배). 앱과 Claude Code 모두 로그인 읽기 실패 → Claude Code `/login` 필요.
+  - 긴급 수정: 자동 갱신 설정 키를 `claudeAutoRefreshV2`로 바꾸고 기본값 false(기존 사용자도 강제로 꺼짐).
+  - 재발 방지 문서: docs/solutions/logic-errors/keychain-write-via-security-interactive-truncates-2026-09-26.md
+  - 남은 일: 길이 제한 없는 저장 방식 + 저장 후 바이트 단위 검증 + 4KB 이상 실제 크기 테스트. (키체인 쓰기 코드라 이 클라우드 세션에서는 차단될 수 있어 로컬 세션에서 진행)

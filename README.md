@@ -113,7 +113,12 @@ Open the menu bar item; each service has a one-click setup.
   "Claude Code-credentials" — choose **Always Allow**.
 - Not signed in to Claude Code yet? **Sign in via Claude Code** opens
   Terminal and runs `claude` (type `/login`).
-- When Claude Code's login expires, the app first re-reads it (Claude Code
+- **Renew Claude login automatically** is off by default. An earlier build
+  truncated the stored login when writing it back (see
+  `docs/solutions/logic-errors/keychain-write-via-security-interactive-truncates-2026-09-26.md`);
+  if Claude Code asks you to sign in, run `/login` once. With renewal off,
+  open Claude Code once after expiry and the app recovers by itself.
+- When renewal is on and Claude Code's login expires, the app first re-reads it (Claude Code
   may already have renewed it). If it is still expired, the app renews it
   with the stored refresh token and saves the result back to the same
   Keychain item (or `~/.claude/.credentials.json`), so Claude Code keeps

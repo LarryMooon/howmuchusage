@@ -55,7 +55,9 @@ final class AppSettings: ObservableObject {
         static let displayMode = "displayMode"
         static let menuBarSize = "menuBarSize"
         static let claudeConnected = "claudeConnected"
-        static let claudeAutoRefresh = "claudeAutoRefresh"
+        // Renamed so everyone starts with renewal off: the first Keychain
+        // write-back (via `security -i`) truncated logins longer than ~2 KB.
+        static let claudeAutoRefresh = "claudeAutoRefreshV2"
         static let codexPath = "codexPath"
         static let hasLaunchedBefore = "hasLaunchedBefore"
     }
@@ -89,7 +91,7 @@ final class AppSettings: ObservableObject {
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .both
         menuBarSize = MenuBarSize(rawValue: defaults.string(forKey: Key.menuBarSize) ?? "") ?? .auto
         claudeConnected = defaults.bool(forKey: Key.claudeConnected)
-        claudeAutoRefresh = defaults.object(forKey: Key.claudeAutoRefresh) as? Bool ?? true
+        claudeAutoRefresh = defaults.object(forKey: Key.claudeAutoRefresh) as? Bool ?? false
         codexPath = defaults.string(forKey: Key.codexPath)
     }
 
