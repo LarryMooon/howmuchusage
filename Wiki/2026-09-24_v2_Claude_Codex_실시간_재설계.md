@@ -202,3 +202,7 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - Compact: 태그 + 숫자만(위 5h, 아래 1w), 색으로 수준 표시. 두 서비스 합쳐 약 76pt.
   - Auto: 아이콘이 숨겨지면(창 occlusion에 visible 없음 또는 화면 밖) Compact로 줄이고, 앱 전환/화면 변경 때 Full을 다시 시도. 곧바로 다시 숨겨지면 재시도 간격을 20초부터 2배씩(최대 5단계) 늘려 깜빡임 방지.
   - 실제 맥에서 숨김 감지가 되는지는 미검증. 안 되면 Compact 고정으로 사용.
+- 2026-09-25: Auto 크기 조절 후에도 "또 사라짐" 보고 → 숨김 감지 보강.
+  - 판단 기준 추가: 상태 아이콘 창이 안 보임(isVisible false), 그리고 노치 맥에서는 `NSScreen.auxiliaryTopRightArea`(노치 오른쪽 보이는 영역)보다 왼쪽에 있으면 숨김으로 판단.
+  - 숨겨진 상태에서 앱을 다시 실행(Finder/Spotlight/`open`)하면 Compact로 줄이고 같은 화면을 오른쪽 위 창(panel)으로 표시.
+  - 진단 로그: `log show --last 30m --predicate 'subsystem == "com.larrymoon.howmuchusage"' --info`에 위치/판단 결과 기록.
