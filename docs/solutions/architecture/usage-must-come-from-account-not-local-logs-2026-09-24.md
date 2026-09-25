@@ -38,8 +38,11 @@ with `~` labels; v2 fixed the cause.
 - A GUI app does not inherit the shell PATH: look up CLIs in known install
   directories, then ask the login shell, and pass a PATH that includes `node`
   for npm-installed tools.
-- Never refresh or rewrite another tool's OAuth login (Claude Code's
-  Keychain item). Read it, and recover automatically when that tool renews it.
+- Treat another tool's OAuth login (Claude Code's Keychain item) as theirs:
+  re-read it first, renew only when it is still expired, write the renewal
+  back to the same place with every other field kept, and re-read right
+  before writing so a renewal made by that tool always wins. Refresh tokens
+  rotate, so a renewal that is not written back would sign that tool out.
 
 ## Verification
 

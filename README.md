@@ -113,8 +113,14 @@ Open the menu bar item; each service has a one-click setup.
   "Claude Code-credentials" — choose **Always Allow**.
 - Not signed in to Claude Code yet? **Sign in via Claude Code** opens
   Terminal and runs `claude` (type `/login`).
-- The app never refreshes or rewrites Claude Code's login. If that login
-  expires, open Claude Code once and the app recovers by itself.
+- When Claude Code's login expires, the app first re-reads it (Claude Code
+  may already have renewed it). If it is still expired, the app renews it
+  with the stored refresh token and saves the result back to the same
+  Keychain item (or `~/.claude/.credentials.json`), so Claude Code keeps
+  working. It re-reads right before saving and never overwrites a login
+  Claude Code renewed in the meantime. Turn off **Renew Claude login
+  automatically** to only read; then open Claude Code once after expiry and
+  the app recovers by itself.
 - Optional: turn on **Claude Code statusline hint** for instant updates while
   Claude Code runs on this Mac. Your existing statusline keeps working (it is
   chained), `~/.claude/settings.json` is backed up first, and turning it off

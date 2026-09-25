@@ -353,6 +353,19 @@ struct SettingsSection: View {
             .toggleStyle(.switch)
 
             if settings.claudeConnected {
+                Toggle(isOn: Binding(
+                    get: { settings.claudeAutoRefresh },
+                    set: { store.setClaudeAutoRefresh($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Renew Claude login automatically")
+                        Text("Saves the renewed login back for Claude Code")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+
                 Button("Disconnect Claude") { store.disconnectClaude() }
                     .buttonStyle(.link)
                     .font(.caption2)
