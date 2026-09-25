@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import os
 import SwiftUI
 import UsageCore
 
@@ -18,6 +19,9 @@ final class StatusItemController: NSObject {
     private var lastUpgradeAt: Date?
     private var failedUpgrades = 0
     private var fitTimer: Timer?
+    private var fallbackPanel: NSPanel?
+    private var lastLoggedFit: String?
+    private let log = Logger(subsystem: "com.larrymoon.howmuchusage", category: "menubar")
 
     init(store: UsageStore) {
         self.store = store
@@ -89,9 +93,35 @@ final class StatusItemController: NSObject {
     /// True when macOS left the item off the visible menu bar for lack of room.
     private var isHiddenForSpace: Bool {
         guard NSMenu.menuBarVisible(), let window = statusItem.button?.window else { return false }
-        if !window.occlusionState.contains(.visible) { return true }
-        guard let screen = window.screen ?? NSScreen.main else { return false }
-        return !screen.frame.intersects(window.frame)
+        let frame = window.frame
+        var reason: String?
+        if !window.isVisible {
+            reason = "window not visible"
+        } else if !window.occlusionState.contains(.visible) {
+            reason = "occluded"
+        } else if let screen = window.screen ?? NSScreen.main {
+            if !screen.frame.intersects(frame) {
+                reason = "off screen"
+            } else if let right = Self.rightOfNotch(on: screen), frame.minX < right.minX - 1 {
+                // On notched Macs only items right of the notch are shown.
+                reason = "left of notch area (minX \(Int(frame.minX)) < \(Int(right.minX)))"
+            }
+        }
+        let summary = "frame=\(Int(frame.minX)),\(Int(frame.minY)) w=\(Int(frame.width)) compact=\(isCompact) hidden=\(reason ?? "no")"
+        if summary != lastLoggedFit {
+            lastLoggedFit = summary
+            log.info("fit: \(summary, privacy: .public)")
+        }
+        return reason != nil
+    }
+
+    /// The visible menu bar area to the right of the camera notch, in global
+    /// coordinates, or nil on screens without a notch.
+    private static func rightOfNotch(on screen: NSScreen) -> NSRect? {
+        guard #available(macOS 12.0, *), let area = screen.auxiliaryTopRightArea, area.width > 0 else { return nil }
+        // Documented relative to the screen; convert when it is not already global.
+        if area.minX >= screen.frame.minX, area.maxX <= screen.frame.maxX + 1 { return area }
+        return area.offsetBy(dx: screen.frame.minX, dy: screen.frame.minY)
     }
 
     private func checkFit() {
@@ -126,9 +156,51 @@ final class StatusItemController: NSObject {
 
     func showPopover() {
         guard let button = statusItem.button, !popover.isShown else { return }
+        if isHiddenForSpace {
+            // Relaunching the app is the way back when macOS hides the item:
+            // shrink it and show the same controls in a window instead.
+            if store.settings.menuBarSize == .auto, !autoCompact {
+                autoCompact = true
+                lastDowngradeAt = Date()
+                render()
+            }
+            showFallbackPanel()
+            return
+        }
         store.popoverOpened()
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private func showFallbackPanel() {
+        store.popoverOpened()
+        let panel: NSPanel
+        if let existing = fallbackPanel {
+            panel = existing
+        } else {
+            panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 600),
+                styleMask: [.titled, .closable, .utilityWindow],
+                backing: .buffered,
+                defer: true
+            )
+            panel.title = "Howmuchusage"
+            panel.isFloatingPanel = true
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            let hosting = NSHostingController(rootView: UsagePopover(store: store, settings: store.settings))
+            hosting.sizingOptions = [.preferredContentSize]
+            panel.contentViewController = hosting
+            fallbackPanel = panel
+        }
+        if let screen = NSScreen.main {
+            let visible = screen.visibleFrame
+            panel.layoutIfNeeded()
+            let size = panel.frame.size
+            panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12, y: visible.maxY - size.height - 8))
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
     }
 
     func showPopoverSoon() {
