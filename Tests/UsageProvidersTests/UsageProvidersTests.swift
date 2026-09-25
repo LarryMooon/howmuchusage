@@ -274,6 +274,13 @@ final class ClaudeTokenRenewalTests: XCTestCase {
         XCTAssertEqual(try ClaudeCredentials.parse(Data(contentsOf: file)).accessToken, "at-old")
     }
 
+    func testErrorDescriptionHidesLongSecrets() {
+        let secretish = String(repeating: "7b22616363657373546f6b656e223a", count: 3)
+        let text = ClaudeProvider.describe(ClaudeCredentialWriter.WriteError.keychain("security: add-generic-password -X \(secretish) failed"))
+        XCTAssertFalse(text.contains(secretish))
+        XCTAssertTrue(text.contains("failed"))
+    }
+
     func testAutoRefreshOffNeverCallsServer() async throws {
         let file = try expiredLogin(in: try temporaryDirectory())
         StubURLProtocol.handler = { _ in

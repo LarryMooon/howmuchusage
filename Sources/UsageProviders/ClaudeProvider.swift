@@ -320,15 +320,23 @@ public final class ClaudeProvider: @unchecked Sendable {
         // The old refresh token is likely spent now, so a failed write-back
         // must not hide the new login from this app. It is verified by
         // reading it back and reported so the user can sign Claude Code in.
-        var problem: String?
+        var writeError: Error?
         do {
             try await writer.write(updated, to: latest.location)
-            let check = try? await store.readStored(allowKeychain: allowed)
-            if check?.credentials.accessToken != renewed.accessToken {
+        } catch {
+            writeError = error
+        }
+        // Judge by what is actually stored: a tool can report an error on a
+        // write that still went through.
+        let check = try? await store.readStored(allowKeychain: allowed)
+        let saved = check?.credentials.accessToken == renewed.accessToken
+        var problem: String?
+        if !saved {
+            if let writeError {
+                problem = "Renewed here, but saving it for Claude Code failed (\(Self.describe(writeError)))."
+            } else {
                 problem = "Renewed here, but the saved login did not update."
             }
-        } catch {
-            problem = "Renewed here, but saving it for Claude Code failed."
         }
         locked {
             cached = renewed
@@ -337,6 +345,18 @@ public final class ClaudeProvider: @unchecked Sendable {
             writeBackProblemStorage = problem.map { "\($0) If Claude Code asks you to sign in, run /login once." }
         }
         return renewed
+    }
+
+    /// Short, secret-free error text for the UI: long hex or token-like runs
+    /// (such as an echoed keychain command) are cut out.
+    static func describe(_ error: Error) -> String {
+        var text = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+        if let regex = try? NSRegularExpression(pattern: "[A-Za-z0-9_\\-+/=]{32,}") {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "…")
+        }
+        text = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        return text.count > 160 ? String(text.prefix(160)) + "…" : text
     }
 
     private func fetch(with credentials: ClaudeCredentials, now: Date) async throws -> UsageSnapshot {

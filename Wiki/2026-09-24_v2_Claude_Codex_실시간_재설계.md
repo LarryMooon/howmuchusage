@@ -206,3 +206,7 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 판단 기준 추가: 상태 아이콘 창이 안 보임(isVisible false), 그리고 노치 맥에서는 `NSScreen.auxiliaryTopRightArea`(노치 오른쪽 보이는 영역)보다 왼쪽에 있으면 숨김으로 판단.
   - 숨겨진 상태에서 앱을 다시 실행(Finder/Spotlight/`open`)하면 Compact로 줄이고 같은 화면을 오른쪽 위 창(panel)으로 표시.
   - 진단 로그: `log show --last 30m --predicate 'subsystem == "com.larrymoon.howmuchusage"'`에 (notice 수준으로 저장; info는 디스크에 남지 않아 2026-09-25 수정) 위치/판단 결과 기록.
+- 2026-09-25: 실제 맥 확인 — Auto 크기로 메뉴바 정상 표시, Claude/Codex 모두 Live. 단 "Renewed here, but saving it for Claude Code failed" 경고 발생.
+  - 원인 후보: 키체인 저장 명령(`security -i`)이 성공했어도 stderr에 뭔가 출력하면 실패로 판단하는 코드. 또는 실제 저장 실패.
+  - 수정: 저장 명령 결과와 무관하게 저장소를 다시 읽어 새 토큰이 들어갔으면 성공으로 판단. 실패면 경고에 오류 내용을 보여주되 32자 이상 토큰/hex 문자열은 잘라냄.
+  - 로그가 비었던 건 raw.githubusercontent.com 캐시(최대 5분) 때문에 notice 수정 전 빌드가 설치됐을 가능성.
