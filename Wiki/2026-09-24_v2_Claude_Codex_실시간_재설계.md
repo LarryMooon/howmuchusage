@@ -197,3 +197,8 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 갱신 거부(400/401/403, refresh token 없음) → `refreshRejected`: "로그인 갱신 불가, `claude`에서 /login 필요" 안내. 10분 backoff 동안에도 같은 이유를 유지.
   - 갱신 후 저장 결과를 다시 읽어 검증. 저장 실패/불일치면 앱은 새 로그인을 계속 쓰되 popover에 주황색 경고("Claude Code가 로그인을 요구하면 /login 한 번").
   - 테스트: 저장 실패(읽기 전용 디렉터리) 시 경고 + 사용량 조회는 계속 성공.
+- 2026-09-25: 사용자 피드백 "메뉴바 아이콘이 안 보임" → 원인은 노치 MacBook에서 메뉴 많은 앱이 앞에 올 때 macOS가 공간 부족으로 상태 아이콘을 숨김(앱은 정상 동작). 폭 ~200pt가 원인.
+  - Menu bar Size 설정 추가: Auto(기본) / Full / Compact.
+  - Compact: 태그 + 숫자만(위 5h, 아래 1w), 색으로 수준 표시. 두 서비스 합쳐 약 76pt.
+  - Auto: 아이콘이 숨겨지면(창 occlusion에 visible 없음 또는 화면 밖) Compact로 줄이고, 앱 전환/화면 변경 때 Full을 다시 시도. 곧바로 다시 숨겨지면 재시도 간격을 20초부터 2배씩(최대 5단계) 늘려 깜빡임 방지.
+  - 실제 맥에서 숨김 감지가 되는지는 미검증. 안 되면 Compact 고정으로 사용.

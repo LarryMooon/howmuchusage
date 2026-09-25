@@ -31,10 +31,29 @@ enum DisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How much of the menu bar the item may take.
+enum MenuBarSize: String, CaseIterable, Identifiable {
+    /// Full bars when they fit; numbers only when macOS would hide the item.
+    case auto
+    case full
+    case compact
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .auto: return "Auto"
+        case .full: return "Full"
+        case .compact: return "Compact"
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private enum Key {
         static let displayMode = "displayMode"
+        static let menuBarSize = "menuBarSize"
         static let claudeConnected = "claudeConnected"
         static let claudeAutoRefresh = "claudeAutoRefresh"
         static let codexPath = "codexPath"
@@ -45,6 +64,10 @@ final class AppSettings: ObservableObject {
 
     @Published var displayMode: DisplayMode {
         didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
+    }
+
+    @Published var menuBarSize: MenuBarSize {
+        didSet { defaults.set(menuBarSize.rawValue, forKey: Key.menuBarSize) }
     }
 
     /// The user agreed to let the app read Claude Code's login from Keychain.
@@ -64,6 +87,7 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .both
+        menuBarSize = MenuBarSize(rawValue: defaults.string(forKey: Key.menuBarSize) ?? "") ?? .auto
         claudeConnected = defaults.bool(forKey: Key.claudeConnected)
         claudeAutoRefresh = defaults.object(forKey: Key.claudeAutoRefresh) as? Bool ?? true
         codexPath = defaults.string(forKey: Key.codexPath)
