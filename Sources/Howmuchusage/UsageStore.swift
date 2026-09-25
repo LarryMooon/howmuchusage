@@ -78,7 +78,11 @@ final class UsageStore: ObservableObject {
     init(settings: AppSettings) {
         self.settings = settings
         codex = CodexProvider(clientVersion: AppInfo.version)
-        claude = ClaudeProvider(appVersion: AppInfo.version, keychainAllowed: settings.claudeConnected)
+        claude = ClaudeProvider(
+            appVersion: AppInfo.version,
+            keychainAllowed: settings.claudeConnected,
+            autoRefresh: settings.claudeAutoRefresh
+        )
         codex.setExecutableOverride(settings.codexPath)
 
         codex.setHandlers(
@@ -218,6 +222,14 @@ final class UsageStore: ObservableObject {
         settings.claudeConnected = false
         claude.setKeychainAllowed(false)
         update(.claude) { $0.connection = .needsSetup(.claudeNotConnected) }
+    }
+
+    func setClaudeAutoRefresh(_ enabled: Bool) {
+        settings.claudeAutoRefresh = enabled
+        claude.setAutoRefresh(enabled)
+        if enabled, case .needsSetup(.claudeExpired) = state(for: .claude).connection {
+            kick(.claude)
+        }
     }
 
     /// Opens Terminal running `claude`, which starts its own sign-in when needed.

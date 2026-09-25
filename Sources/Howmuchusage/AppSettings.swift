@@ -36,6 +36,7 @@ final class AppSettings: ObservableObject {
     private enum Key {
         static let displayMode = "displayMode"
         static let claudeConnected = "claudeConnected"
+        static let claudeAutoRefresh = "claudeAutoRefresh"
         static let codexPath = "codexPath"
         static let hasLaunchedBefore = "hasLaunchedBefore"
     }
@@ -51,6 +52,11 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(claudeConnected, forKey: Key.claudeConnected) }
     }
 
+    /// Renew an expired Claude Code login here and save it back to Keychain.
+    @Published var claudeAutoRefresh: Bool {
+        didSet { defaults.set(claudeAutoRefresh, forKey: Key.claudeAutoRefresh) }
+    }
+
     @Published var codexPath: String? {
         didSet { defaults.set(codexPath, forKey: Key.codexPath) }
     }
@@ -59,6 +65,7 @@ final class AppSettings: ObservableObject {
         self.defaults = defaults
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .both
         claudeConnected = defaults.bool(forKey: Key.claudeConnected)
+        claudeAutoRefresh = defaults.object(forKey: Key.claudeAutoRefresh) as? Bool ?? true
         codexPath = defaults.string(forKey: Key.codexPath)
     }
 

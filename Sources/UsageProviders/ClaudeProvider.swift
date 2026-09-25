@@ -47,8 +47,8 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
     }
 }
 
-/// Reads the OAuth login Claude Code already stores on this Mac. It never
-/// refreshes or rewrites that login, so Claude Code keeps working untouched.
+/// Reads the OAuth login Claude Code already stores on this Mac. Renewals
+/// are written back by `ClaudeCredentialWriter`, so Claude Code keeps working.
 public final class ClaudeCredentialStore: @unchecked Sendable {
     public static let keychainService = "Claude Code-credentials"
 
@@ -59,6 +59,10 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
     }
 
     public func read(allowKeychain: Bool) async throws -> ClaudeCredentials {
+        try await readStored(allowKeychain: allowKeychain).credentials
+    }
+
+    public func readStored(allowKeychain: Bool) async throws -> ClaudeStoredLogin {
         var keychainError: ClaudeProviderError?
 
         if allowKeychain {
@@ -70,9 +74,9 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
                 timeout: 120
             )
             if result.status == 0 {
-                let text = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let credentials = try? ClaudeCredentials.parse(Data(text.utf8)) {
-                    return credentials
+                let data = Data(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
+                if let credentials = try? ClaudeCredentials.parse(data) {
+                    return ClaudeStoredLogin(credentials: credentials, data: data, location: .keychain)
                 }
                 keychainError = .badResponse
             } else if result.status != 44 {
@@ -83,7 +87,7 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
 
         if let data = try? Data(contentsOf: credentialsFile),
            let credentials = try? ClaudeCredentials.parse(data) {
-            return credentials
+            return ClaudeStoredLogin(credentials: credentials, data: data, location: .file(credentialsFile))
         }
 
         if let keychainError { throw keychainError }
@@ -169,22 +173,48 @@ public struct ClaudeUsageClient: Sendable {
 /// Claude usage from the account usage endpoint (all devices), authenticated
 /// with Claude Code's stored login.
 public final class ClaudeProvider: @unchecked Sendable {
+    /// Minimum wait between renewal attempts, so a dead refresh token is not
+    /// retried on every poll.
+    public static let refreshRetryInterval: TimeInterval = 10 * 60
+
     private let store: ClaudeCredentialStore
     private let client: ClaudeUsageClient
+    private let refresher: ClaudeTokenRefreshClient
+    private let writer: ClaudeCredentialWriter
     private let lock = NSLock()
     private var cached: ClaudeCredentials?
     private var keychainAllowed: Bool
+    private var autoRefresh: Bool
+    private var lastRefreshAttempt: Date?
 
-    public init(appVersion: String, keychainAllowed: Bool, store: ClaudeCredentialStore = ClaudeCredentialStore()) {
+    public init(
+        appVersion: String,
+        keychainAllowed: Bool,
+        autoRefresh: Bool = false,
+        store: ClaudeCredentialStore = ClaudeCredentialStore(),
+        writer: ClaudeCredentialWriter = ClaudeCredentialWriter(),
+        session: URLSession? = nil
+    ) {
         self.store = store
-        self.client = ClaudeUsageClient(appVersion: appVersion)
+        self.client = ClaudeUsageClient(appVersion: appVersion, session: session)
+        self.refresher = ClaudeTokenRefreshClient(appVersion: appVersion, session: session)
+        self.writer = writer
         self.keychainAllowed = keychainAllowed
+        self.autoRefresh = autoRefresh
     }
 
     public func setKeychainAllowed(_ allowed: Bool) {
         locked {
             keychainAllowed = allowed
             if !allowed { cached = nil }
+        }
+    }
+
+    /// When on, an expired login is renewed here and written back for Claude Code.
+    public func setAutoRefresh(_ enabled: Bool) {
+        locked {
+            autoRefresh = enabled
+            if enabled { lastRefreshAttempt = nil }
         }
     }
 
@@ -197,7 +227,9 @@ public final class ClaudeProvider: @unchecked Sendable {
         if credentials.isExpired(now: now) {
             // Claude Code may have renewed the login since the last read.
             credentials = try await self.credentials(reload: true)
-            if credentials.isExpired(now: now) { throw ClaudeProviderError.tokenExpired }
+            if credentials.isExpired(now: now) {
+                credentials = try await renew(now: now)
+            }
         }
 
         do {
@@ -216,6 +248,63 @@ public final class ClaudeProvider: @unchecked Sendable {
         let credentials = try await self.credentials(reload: true)
         if credentials.isExpired(now: now) { throw ClaudeProviderError.tokenExpired }
         return try await client.fetchRaw(token: credentials.accessToken, now: now)
+    }
+
+    /// Renews an expired login and stores it where Claude Code reads it.
+    /// If Claude Code renewed it in the meantime, its login wins.
+    private func renew(now: Date) async throws -> ClaudeCredentials {
+        // Claiming the attempt under the lock also keeps overlapping reads
+        // from spending the refresh token twice.
+        let (claimed, allowed) = locked { () -> (Bool, Bool) in
+            guard autoRefresh else { return (false, keychainAllowed) }
+            if let lastRefreshAttempt, now.timeIntervalSince(lastRefreshAttempt) < Self.refreshRetryInterval {
+                return (false, keychainAllowed)
+            }
+            lastRefreshAttempt = now
+            return (true, keychainAllowed)
+        }
+        guard claimed else { throw ClaudeProviderError.tokenExpired }
+
+        let stored = try await store.readStored(allowKeychain: allowed)
+        if !stored.credentials.isExpired(now: now) {
+            locked {
+                cached = stored.credentials
+                lastRefreshAttempt = nil
+            }
+            return stored.credentials
+        }
+        guard let refreshToken = stored.credentials.refreshToken else {
+            throw ClaudeProviderError.tokenExpired
+        }
+
+        let response = try await refresher.refresh(refreshToken: refreshToken, now: now)
+
+        // Re-read right before writing: never overwrite a newer login.
+        let latest = try await store.readStored(allowKeychain: allowed)
+        if latest.credentials.accessToken != stored.credentials.accessToken
+            || latest.credentials.refreshToken != stored.credentials.refreshToken {
+            locked { cached = latest.credentials }
+            if latest.credentials.isExpired(now: now) { throw ClaudeProviderError.tokenExpired }
+            return latest.credentials
+        }
+
+        let updated: Data
+        let renewed: ClaudeCredentials
+        do {
+            updated = try ClaudeTokenRefresh.updatedCredentialsData(latest.data, with: response)
+            renewed = try ClaudeCredentials.parse(updated)
+        } catch {
+            throw ClaudeProviderError.badResponse
+        }
+
+        // The old refresh token is likely spent now, so a failed write-back
+        // must not hide the new login from this app.
+        try? await writer.write(updated, to: latest.location)
+        locked {
+            cached = renewed
+            lastRefreshAttempt = nil
+        }
+        return renewed
     }
 
     private func fetch(with credentials: ClaudeCredentials, now: Date) async throws -> UsageSnapshot {

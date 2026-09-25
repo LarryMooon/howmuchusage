@@ -205,15 +205,24 @@ public enum ClaudeOAuthUsageParser {
 }
 
 /// Claude Code's stored OAuth login (Keychain item `Claude Code-credentials`
-/// or `~/.claude/.credentials.json`). Only the fields needed to read usage.
+/// or `~/.claude/.credentials.json`). Only the fields needed to read usage
+/// and renew the login.
 public struct ClaudeCredentials: Equatable, Sendable {
     public var accessToken: String
+    public var refreshToken: String?
     public var expiresAt: Date?
     public var subscriptionType: String?
     public var scopes: [String]
 
-    public init(accessToken: String, expiresAt: Date?, subscriptionType: String?, scopes: [String]) {
+    public init(
+        accessToken: String,
+        refreshToken: String? = nil,
+        expiresAt: Date?,
+        subscriptionType: String?,
+        scopes: [String]
+    ) {
         self.accessToken = accessToken
+        self.refreshToken = refreshToken
         self.expiresAt = expiresAt
         self.subscriptionType = subscriptionType
         self.scopes = scopes
@@ -236,8 +245,10 @@ public struct ClaudeCredentials: Equatable, Sendable {
         let expiresAt = JSONValue.double(oauth["expiresAt"]).map { value in
             Date(timeIntervalSince1970: value > 10_000_000_000 ? value / 1_000 : value)
         }
+        let refreshToken = (oauth["refreshToken"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return ClaudeCredentials(
             accessToken: token,
+            refreshToken: refreshToken,
             expiresAt: expiresAt,
             subscriptionType: oauth["subscriptionType"] as? String,
             scopes: oauth["scopes"] as? [String] ?? []
@@ -248,6 +259,82 @@ public struct ClaudeCredentials: Equatable, Sendable {
     public func isExpired(now: Date, margin: TimeInterval = 60) -> Bool {
         guard let expiresAt else { return false }
         return expiresAt.addingTimeInterval(-margin) <= now
+    }
+}
+
+/// Renewing Claude Code's OAuth login with its refresh token, the same way
+/// Claude Code does. Pure request/response handling; networking and storage
+/// live in UsageProviders.
+public enum ClaudeTokenRefresh {
+    /// Claude Code's public OAuth client.
+    public static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
+    public struct Response: Equatable, Sendable {
+        public var accessToken: String
+        public var refreshToken: String?
+        public var expiresAt: Date?
+        public var scopes: [String]?
+
+        public init(accessToken: String, refreshToken: String?, expiresAt: Date?, scopes: [String]?) {
+            self.accessToken = accessToken
+            self.refreshToken = refreshToken
+            self.expiresAt = expiresAt
+            self.scopes = scopes
+        }
+    }
+
+    public enum ParseError: Error, Equatable {
+        case notJSON
+        case missingAccessToken
+    }
+
+    public static func requestBody(refreshToken: String, clientID: String = ClaudeTokenRefresh.clientID) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: [
+                "grant_type": "refresh_token",
+                "refresh_token": refreshToken,
+                "client_id": clientID
+            ],
+            options: [.sortedKeys]
+        )
+    }
+
+    /// Parses `{"access_token", "refresh_token", "expires_in", "scope"}`.
+    public static func parseResponse(_ data: Data, now: Date) throws -> Response {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ParseError.notJSON
+        }
+        guard let token = object["access_token"] as? String, !token.isEmpty else {
+            throw ParseError.missingAccessToken
+        }
+        let refresh = (object["refresh_token"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let expiresAt = JSONValue.double(object["expires_in"]).map { now.addingTimeInterval($0) }
+        let scopes = (object["scope"] as? String)?
+            .split(separator: " ")
+            .map(String.init)
+        return Response(accessToken: token, refreshToken: refresh, expiresAt: expiresAt, scopes: scopes)
+    }
+
+    /// Applies a renewal to the stored login JSON, keeping every other field
+    /// (and any other top-level entries) exactly as Claude Code wrote them.
+    public static func updatedCredentialsData(_ original: Data, with response: Response) throws -> Data {
+        guard var root = try? JSONSerialization.jsonObject(with: original) as? [String: Any] else {
+            throw ClaudeCredentials.ParseError.notJSON
+        }
+        let nested = root["claudeAiOauth"] is [String: Any]
+        var oauth = (root["claudeAiOauth"] as? [String: Any]) ?? root
+        oauth["accessToken"] = response.accessToken
+        if let refresh = response.refreshToken { oauth["refreshToken"] = refresh }
+        if let expiresAt = response.expiresAt {
+            oauth["expiresAt"] = Int64((expiresAt.timeIntervalSince1970 * 1_000).rounded())
+        }
+        if let scopes = response.scopes, !scopes.isEmpty { oauth["scopes"] = scopes }
+        if nested {
+            root["claudeAiOauth"] = oauth
+        } else {
+            root = oauth
+        }
+        return try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
     }
 }
 

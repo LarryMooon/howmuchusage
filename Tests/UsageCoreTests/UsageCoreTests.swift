@@ -141,6 +141,55 @@ final class ClaudeParsingTests: XCTestCase {
         XCTAssertThrowsError(try ClaudeCredentials.parse(Data("{\"claudeAiOauth\":{}}".utf8)))
     }
 
+    func testCredentialsKeepRefreshToken() throws {
+        let credentials = try ClaudeCredentials.parse(fixture("claude-credentials.json"))
+        XCTAssertEqual(credentials.refreshToken, "sk-ant-ort01-test")
+        let withoutRefresh = try ClaudeCredentials.parse(Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":""}}"#.utf8))
+        XCTAssertNil(withoutRefresh.refreshToken)
+    }
+
+    func testTokenRefreshRequestAndResponse() throws {
+        let body = try ClaudeTokenRefresh.requestBody(refreshToken: "rt-old")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+        XCTAssertEqual(object["grant_type"], "refresh_token")
+        XCTAssertEqual(object["refresh_token"], "rt-old")
+        XCTAssertEqual(object["client_id"], ClaudeTokenRefresh.clientID)
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let response = try ClaudeTokenRefresh.parseResponse(
+            Data(#"{"access_token":"at-new","refresh_token":"rt-new","expires_in":28800,"scope":"user:inference user:profile"}"#.utf8),
+            now: now
+        )
+        XCTAssertEqual(response.accessToken, "at-new")
+        XCTAssertEqual(response.refreshToken, "rt-new")
+        XCTAssertEqual(response.expiresAt, now.addingTimeInterval(28_800))
+        XCTAssertEqual(response.scopes, ["user:inference", "user:profile"])
+        XCTAssertThrowsError(try ClaudeTokenRefresh.parseResponse(Data(#"{"error":"invalid_grant"}"#.utf8), now: now))
+    }
+
+    func testTokenRefreshKeepsOtherStoredFields() throws {
+        let original = Data(#"{"claudeAiOauth":{"accessToken":"at-old","refreshToken":"rt-old","expiresAt":1700000000000,"scopes":["user:inference"],"subscriptionType":"max","rateLimitTier":"tier"},"mcpOAuth":{"server":{"token":"x"}}}"#.utf8)
+        let response = ClaudeTokenRefresh.Response(
+            accessToken: "at-new",
+            refreshToken: "rt-new",
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
+            scopes: nil
+        )
+        let updated = try ClaudeTokenRefresh.updatedCredentialsData(original, with: response)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: updated) as? [String: Any])
+        let oauth = try XCTUnwrap(root["claudeAiOauth"] as? [String: Any])
+        XCTAssertEqual(oauth["accessToken"] as? String, "at-new")
+        XCTAssertEqual(oauth["refreshToken"] as? String, "rt-new")
+        XCTAssertEqual((oauth["expiresAt"] as? NSNumber)?.int64Value, 1_800_000_000_000)
+        XCTAssertEqual(oauth["scopes"] as? [String], ["user:inference"])
+        XCTAssertEqual(oauth["subscriptionType"] as? String, "max")
+        XCTAssertEqual(oauth["rateLimitTier"] as? String, "tier")
+        XCTAssertNotNil(root["mcpOAuth"])
+
+        let parsed = try ClaudeCredentials.parse(updated)
+        XCTAssertEqual(parsed.expiresAt, Date(timeIntervalSince1970: 1_800_000_000))
+    }
+
     func testStatuslineBridgeKeepsOnlyRateLimits() throws {
         let input = try fixture("statusline-input.json")
         let limits = try XCTUnwrap(ClaudeStatuslineParser.rateLimits(fromStatuslineInput: input))

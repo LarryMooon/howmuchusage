@@ -162,6 +162,167 @@ final class ClaudeProviderTests: XCTestCase {
     }
 }
 
+final class ClaudeTokenRenewalTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    override func tearDown() {
+        StubURLProtocol.handler = nil
+    }
+
+    private func expiredLogin(in directory: URL) throws -> URL {
+        let file = directory.appendingPathComponent(".credentials.json")
+        try Data(#"{"claudeAiOauth":{"accessToken":"at-old","refreshToken":"rt-old","expiresAt":1700000000000,"subscriptionType":"pro"},"other":1}"#.utf8).write(to: file)
+        return file
+    }
+
+    private func provider(file: URL, autoRefresh: Bool = true) -> ClaudeProvider {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        return ClaudeProvider(
+            appVersion: "test",
+            keychainAllowed: false,
+            autoRefresh: autoRefresh,
+            store: ClaudeCredentialStore(credentialsFile: file),
+            session: URLSession(configuration: configuration)
+        )
+    }
+
+    private static let usageBody = Data(#"{"five_hour":{"utilization":12,"resets_at":"2027-01-15T08:00:00+00:00"}}"#.utf8)
+
+    func testRenewsExpiredLoginAndWritesItBack() async throws {
+        let file = try expiredLogin(in: try temporaryDirectory())
+        var refreshBody: [String: String]?
+        StubURLProtocol.handler = { request in
+            if request.url == ClaudeTokenRefreshClient.endpoint {
+                refreshBody = (try? JSONSerialization.jsonObject(with: request.bodyData)) as? [String: String]
+                return (200, Data(#"{"access_token":"at-new","refresh_token":"rt-new","expires_in":28800}"#.utf8))
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer at-new")
+            return (200, Self.usageBody)
+        }
+
+        let snapshot = try await provider(file: file).read(now: now)
+        XCTAssertEqual(snapshot.windows.first?.usedPercent, 12)
+        XCTAssertEqual(refreshBody?["refresh_token"], "rt-old")
+
+        let saved = try ClaudeCredentials.parse(Data(contentsOf: file))
+        XCTAssertEqual(saved.accessToken, "at-new")
+        XCTAssertEqual(saved.refreshToken, "rt-new")
+        XCTAssertEqual(saved.subscriptionType, "pro")
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertEqual(root["other"] as? Int, 1)
+        let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+    }
+
+    func testClaudeCodeRenewalDuringRefreshWins() async throws {
+        let file = try expiredLogin(in: try temporaryDirectory())
+        let newer = Data(#"{"claudeAiOauth":{"accessToken":"at-claude","refreshToken":"rt-claude","expiresAt":4102444800000}}"#.utf8)
+        StubURLProtocol.handler = { request in
+            if request.url == ClaudeTokenRefreshClient.endpoint {
+                // Claude Code saves its own renewal while ours is in flight.
+                try? newer.write(to: file)
+                return (200, Data(#"{"access_token":"at-mine","refresh_token":"rt-mine","expires_in":28800}"#.utf8))
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer at-claude")
+            return (200, Self.usageBody)
+        }
+
+        _ = try await provider(file: file).read(now: now)
+        XCTAssertEqual(try Data(contentsOf: file), newer, "Claude Code's login must not be overwritten")
+    }
+
+    func testRejectedRefreshReportsExpiredAndBacksOff() async throws {
+        let file = try expiredLogin(in: try temporaryDirectory())
+        var refreshCalls = 0
+        StubURLProtocol.handler = { _ in
+            refreshCalls += 1
+            return (400, Data(#"{"error":"invalid_grant"}"#.utf8))
+        }
+        let provider = provider(file: file)
+
+        for offset in [0.0, 60] {
+            do {
+                _ = try await provider.read(now: now.addingTimeInterval(offset))
+                XCTFail("expected an error")
+            } catch {
+                XCTAssertEqual(error as? ClaudeProviderError, .tokenExpired)
+            }
+        }
+        XCTAssertEqual(refreshCalls, 1, "a rejected refresh is not retried on every poll")
+        XCTAssertEqual(try ClaudeCredentials.parse(Data(contentsOf: file)).accessToken, "at-old")
+    }
+
+    func testAutoRefreshOffNeverCallsServer() async throws {
+        let file = try expiredLogin(in: try temporaryDirectory())
+        StubURLProtocol.handler = { _ in
+            XCTFail("no network expected")
+            return (500, Data())
+        }
+        do {
+            _ = try await provider(file: file, autoRefresh: false).read(now: now)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? ClaudeProviderError, .tokenExpired)
+        }
+    }
+
+    func testKeychainAccountParsingAndCommand() {
+        let attributes = """
+        keychain: "/Users/me/Library/Keychains/login.keychain-db"
+        attributes:
+            "acct"<blob>="larry"
+            "svce"<blob>="Claude Code-credentials"
+        """
+        XCTAssertEqual(ClaudeCredentialWriter.account(fromAttributes: attributes), "larry")
+        XCTAssertNil(ClaudeCredentialWriter.account(fromAttributes: "\"acct\"<blob>=<NULL>"))
+
+        let command = ClaudeCredentialWriter.keychainUpdateCommand(account: "larry", data: Data("{}".utf8))
+        XCTAssertEqual(command, "add-generic-password -U -a \"larry\" -s \"Claude Code-credentials\" -X 7b7d\n")
+        XCTAssertNil(ClaudeCredentialWriter.keychainUpdateCommand(account: "a\" -w x", data: Data()))
+    }
+}
+
+/// Serves canned responses to a URLSession configured with it.
+final class StubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler, let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let (status, body) = handler(request)
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private extension URLRequest {
+    /// URLSession moves POST bodies into a stream before protocols see them.
+    var bodyData: Data {
+        if let httpBody { return httpBody }
+        guard let stream = httpBodyStream else { return Data() }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
+}
+
 final class StatuslineBridgeTests: XCTestCase {
     func testInstallChainsPreviousCommandAndUninstallRestores() throws {
         let root = try temporaryDirectory()
