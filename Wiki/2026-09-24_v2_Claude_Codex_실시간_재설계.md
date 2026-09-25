@@ -191,3 +191,4 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 - 2026-09-24: 클라우드 세션 크레딧 표시 추가. 키 이름(코드명) 대신 `limit_dollars`+`remaining_dollars` 모양으로 인식해 `CreditBalance`로 파싱, popover에 "Cloud credits $235.28 of $250 left · expires in …" 행 표시. 병합 시 statusline 스냅샷이 이겨도 크레딧 정보는 유지.
 - 2026-09-24: GitHub 문서(README, RELEASE_NOTES) 정리, 설치 주소를 main으로 변경, PR 생성 후 main 머지.
 - 2026-09-24: 사용자가 준 실제 메뉴바 스크린샷 2장을 `docs/images/`에 넣고 README 상단에 표시.
+- 2026-09-25: 사용자 피드백 "새로고침 버튼이 눌리는지 모르겠음" → 테두리 있는 "Refresh" 버튼(⌘R), 조회 중에는 스피너, 누른 뒤 "Checking now… / Claude in 32s (rate limit)" 안내를 6초간 표시.
