@@ -110,7 +110,7 @@ final class StatusItemController: NSObject {
         let summary = "frame=\(Int(frame.minX)),\(Int(frame.minY)) w=\(Int(frame.width)) compact=\(isCompact) hidden=\(reason ?? "no")"
         if summary != lastLoggedFit {
             lastLoggedFit = summary
-            log.info("fit: \(summary, privacy: .public)")
+            log.notice("fit: \(summary, privacy: .public)")
         }
         return reason != nil
     }
