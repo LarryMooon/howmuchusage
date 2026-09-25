@@ -68,7 +68,7 @@ public struct ClaudeTokenRefreshClient: Sendable {
             }
         case 400, 401, 403:
             // The refresh token was used up or revoked; only a new sign-in helps.
-            throw ClaudeProviderError.tokenExpired
+            throw ClaudeProviderError.refreshRejected
         case 429:
             throw ClaudeProviderError.rateLimited(
                 retryAfter: ClaudeUsageClient.retryAfter(http.value(forHTTPHeaderField: "Retry-After"), now: now)
