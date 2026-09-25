@@ -91,6 +91,13 @@ struct ProviderSection: View {
                 SourceLine(snapshot: snapshot, state: state, now: store.now)
             }
 
+            if let warning = state.warning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             ConnectionView(store: store, provider: provider, state: state)
         }
     }

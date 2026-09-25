@@ -40,6 +40,8 @@ struct ProviderState {
     var snapshot: UsageSnapshot?
     var connection: ConnectionState = .idle
     var isRefreshing = false
+    /// Non-blocking problem worth showing next to fresh data.
+    var warning: String?
     var poll = PollState()
     var nextRefreshAt: Date?
 
@@ -349,7 +351,11 @@ final class UsageStore: ObservableObject {
         do {
             let snapshot = try await claude.read(now: Date())
             apply(snapshot, to: .claude, countsAsPoll: true)
-            update(.claude) { $0.connection = .connected }
+            let warning = claude.writeBackProblem
+            update(.claude) {
+                $0.connection = .connected
+                $0.warning = warning
+            }
         } catch {
             let providerError = error as? ClaudeProviderError
             update(.claude) { $0.poll.recordFailure(at: Date(), retryAfter: providerError?.retryAfter) }
@@ -358,7 +364,7 @@ final class UsageStore: ObservableObject {
             case .keychainNotAllowed?: connection = .needsSetup(.claudeNotConnected)
             case .notSignedIn?: connection = .needsSetup(.claudeNotSignedIn)
             case .tokenExpired?: connection = .needsSetup(.claudeExpired)
-            case .unauthorized?, .keychainDenied?, .http(status: 403)?:
+            case .unauthorized?, .refreshRejected?, .keychainDenied?, .http(status: 403)?:
                 connection = .needsSetup(.claudeRelogin(error.localizedDescription))
             default:
                 connection = .failing(error.localizedDescription)

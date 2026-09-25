@@ -246,10 +246,31 @@ final class ClaudeTokenRenewalTests: XCTestCase {
                 _ = try await provider.read(now: now.addingTimeInterval(offset))
                 XCTFail("expected an error")
             } catch {
-                XCTAssertEqual(error as? ClaudeProviderError, .tokenExpired)
+                XCTAssertEqual(error as? ClaudeProviderError, .refreshRejected, "a dead refresh token needs /login, not just opening Claude Code")
             }
         }
         XCTAssertEqual(refreshCalls, 1, "a rejected refresh is not retried on every poll")
+        XCTAssertEqual(try ClaudeCredentials.parse(Data(contentsOf: file)).accessToken, "at-old")
+    }
+
+    func testFailedWriteBackIsReportedButLoginStillWorks() async throws {
+        let directory = try temporaryDirectory()
+        let file = try expiredLogin(in: directory)
+        StubURLProtocol.handler = { request in
+            if request.url == ClaudeTokenRefreshClient.endpoint {
+                // Make the directory read-only so the atomic save fails.
+                try? FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+                return (200, Data(#"{"access_token":"at-new","refresh_token":"rt-new","expires_in":28800}"#.utf8))
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer at-new")
+            return (200, Self.usageBody)
+        }
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+
+        let provider = provider(file: file)
+        let snapshot = try await provider.read(now: now)
+        XCTAssertEqual(snapshot.windows.first?.usedPercent, 12, "the renewed login is still used by this app")
+        XCTAssertNotNil(provider.writeBackProblem)
         XCTAssertEqual(try ClaudeCredentials.parse(Data(contentsOf: file)).accessToken, "at-old")
     }
 

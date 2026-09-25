@@ -9,6 +9,8 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
     case notSignedIn
     case keychainDenied(String)
     case tokenExpired
+    /// The refresh token was rejected (signed out, revoked or already used).
+    case refreshRejected
     case unauthorized
     case rateLimited(retryAfter: TimeInterval?)
     case http(status: Int)
@@ -25,6 +27,8 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
             return "Keychain access was denied\(detail.isEmpty ? "" : ": \(detail)")."
         case .tokenExpired:
             return "Claude Code login expired. Open Claude Code once to renew it; this app picks it up automatically."
+        case .refreshRejected:
+            return "Claude login could not be renewed (signed out or revoked). Run `claude` and /login once."
         case .unauthorized:
             return "Claude rejected the stored login. Run `claude` and /login again."
         case .rateLimited:
@@ -186,6 +190,14 @@ public final class ClaudeProvider: @unchecked Sendable {
     private var keychainAllowed: Bool
     private var autoRefresh: Bool
     private var lastRefreshAttempt: Date?
+    /// Why the last renewal failed, repeated while the retry backoff lasts.
+    private var lastRefreshFailure: ClaudeProviderError?
+    private var writeBackProblemStorage: String?
+
+    /// Set when a renewal worked here but could not be saved for Claude Code.
+    public var writeBackProblem: String? {
+        locked { writeBackProblemStorage }
+    }
 
     public init(
         appVersion: String,
@@ -263,21 +275,29 @@ public final class ClaudeProvider: @unchecked Sendable {
             lastRefreshAttempt = now
             return (true, keychainAllowed)
         }
-        guard claimed else { throw ClaudeProviderError.tokenExpired }
+        guard claimed else { throw locked { lastRefreshFailure } ?? ClaudeProviderError.tokenExpired }
 
         let stored = try await store.readStored(allowKeychain: allowed)
         if !stored.credentials.isExpired(now: now) {
             locked {
                 cached = stored.credentials
                 lastRefreshAttempt = nil
+                lastRefreshFailure = nil
             }
             return stored.credentials
         }
         guard let refreshToken = stored.credentials.refreshToken else {
-            throw ClaudeProviderError.tokenExpired
+            locked { lastRefreshFailure = .refreshRejected }
+            throw ClaudeProviderError.refreshRejected
         }
 
-        let response = try await refresher.refresh(refreshToken: refreshToken, now: now)
+        let response: ClaudeTokenRefresh.Response
+        do {
+            response = try await refresher.refresh(refreshToken: refreshToken, now: now)
+        } catch ClaudeProviderError.refreshRejected {
+            locked { lastRefreshFailure = .refreshRejected }
+            throw ClaudeProviderError.refreshRejected
+        }
 
         // Re-read right before writing: never overwrite a newer login.
         let latest = try await store.readStored(allowKeychain: allowed)
@@ -298,11 +318,23 @@ public final class ClaudeProvider: @unchecked Sendable {
         }
 
         // The old refresh token is likely spent now, so a failed write-back
-        // must not hide the new login from this app.
-        try? await writer.write(updated, to: latest.location)
+        // must not hide the new login from this app. It is verified by
+        // reading it back and reported so the user can sign Claude Code in.
+        var problem: String?
+        do {
+            try await writer.write(updated, to: latest.location)
+            let check = try? await store.readStored(allowKeychain: allowed)
+            if check?.credentials.accessToken != renewed.accessToken {
+                problem = "Renewed here, but the saved login did not update."
+            }
+        } catch {
+            problem = "Renewed here, but saving it for Claude Code failed."
+        }
         locked {
             cached = renewed
             lastRefreshAttempt = nil
+            lastRefreshFailure = nil
+            writeBackProblemStorage = problem.map { "\($0) If Claude Code asks you to sign in, run /login once." }
         }
         return renewed
     }

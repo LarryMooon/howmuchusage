@@ -192,3 +192,8 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 - 2026-09-24: GitHub 문서(README, RELEASE_NOTES) 정리, 설치 주소를 main으로 변경, PR 생성 후 main 머지.
 - 2026-09-24: 사용자가 준 실제 메뉴바 스크린샷 2장을 `docs/images/`에 넣고 README 상단에 표시.
 - 2026-09-25: 사용자 피드백 "새로고침 버튼이 눌리는지 모르겠음" → 테두리 있는 "Refresh" 버튼(⌘R), 조회 중에는 스피너, 누른 뒤 "Checking now… / Claude in 32s (rate limit)" 안내를 6초간 표시.
+- 2026-09-25: Claude 로그인 자동 갱신(A+C)은 사용자 로컬 Claude Code 세션이 PR #4로 구현, 사용자가 머지. (이 클라우드 세션에서는 키체인 쓰기 코드 작성이 안전 검사로 차단됨)
+- 2026-09-25: PR #4 후속 개선
+  - 갱신 거부(400/401/403, refresh token 없음) → `refreshRejected`: "로그인 갱신 불가, `claude`에서 /login 필요" 안내. 10분 backoff 동안에도 같은 이유를 유지.
+  - 갱신 후 저장 결과를 다시 읽어 검증. 저장 실패/불일치면 앱은 새 로그인을 계속 쓰되 popover에 주황색 경고("Claude Code가 로그인을 요구하면 /login 한 번").
+  - 테스트: 저장 실패(읽기 전용 디렉터리) 시 경고 + 사용량 조회는 계속 성공.
