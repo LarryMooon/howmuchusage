@@ -159,6 +159,8 @@ final class ClaudeProviderTests: XCTestCase {
         let date = ClaudeUsageClient.retryAfter("Fri, 15 Jan 2027 08:05:00 GMT", now: now)
         XCTAssertEqual(date ?? -1, 300, accuracy: 1)
         XCTAssertEqual(ClaudeProviderError.rateLimited(retryAfter: nil).retryAfter, 300)
+        XCTAssertEqual(ClaudeProviderError.rateLimited(retryAfter: 0).retryAfter, 300, "Retry-After: 0 still waits")
+        XCTAssertEqual(ClaudeProviderError.rateLimited(retryAfter: 900).retryAfter, 900)
     }
 }
 

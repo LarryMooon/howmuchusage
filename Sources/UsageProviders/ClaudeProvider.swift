@@ -46,7 +46,11 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
 
     /// Server-requested wait before the next attempt, if any.
     public var retryAfter: TimeInterval? {
-        if case .rateLimited(let retryAfter) = self { return retryAfter ?? 300 }
+        // The usage server answers 429 with `Retry-After: 0`; retrying at
+        // once keeps it limited, so wait at least five minutes.
+        if case .rateLimited(let retryAfter) = self {
+            return max(retryAfter ?? 0, PollPolicy.claude.rateLimitedMinimum)
+        }
         return nil
     }
 }
