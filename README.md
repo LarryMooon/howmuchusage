@@ -39,8 +39,8 @@ yet, so the script clears the download flag that would otherwise block the
 first launch.
 
 Manual download:
-[Howmuchusage-2.0.0-universal-macos.zip](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.0.0-universal-macos.zip)
-([SHA-256](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.0.0-universal-macos.zip.sha256)).
+[Howmuchusage-2.1.0-universal-macos.zip](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.1.0-universal-macos.zip)
+([SHA-256](https://github.com/LarryMooon/howmuchusage/raw/main/Downloads/Howmuchusage-2.1.0-universal-macos.zip.sha256)).
 
 ## What it shows
 
@@ -50,8 +50,9 @@ Manual download:
   - Claude per-model weekly caps (for example *Weekly · Fable*),
   - Claude cloud session credits (`$235.28 of $250 left · expires in …`),
   - Codex credits when the account has them.
-- Display mode (Both / Claude / Codex), Launch at Login, and links to the
-  official usage pages.
+- Display mode (Both / Claude / Codex), menu bar Size (Auto / Full /
+  Compact — Auto shrinks when macOS would hide the item behind the notch),
+  Launch at Login, and links to the official usage pages.
 
 ## How it stays current on every device
 
@@ -72,7 +73,9 @@ Refresh schedule adapts automatically:
 - Claude: every 60 s while usage moves, 120 s normally, 300 s when idle.
 - Immediate re-check after wake from sleep, network recovery, opening the
   popover, local Codex/Claude Code activity, and Codex push notifications.
-- Errors back off (30 s → 15 min); a server "slow down" is always respected.
+- Errors back off (30 s → 15 min). A server "slow down" (HTTP 429) is always
+  respected, and Claude waits at least 5 minutes even when the server says
+  `Retry-After: 0`.
 
 ## Trust indicators
 
@@ -113,22 +116,17 @@ Open the menu bar item; each service has a one-click setup.
   "Claude Code-credentials" — choose **Always Allow**.
 - Not signed in to Claude Code yet? **Sign in via Claude Code** opens
   Terminal and runs `claude` (type `/login`).
-- **Renew Claude login automatically** is off by default; turn it on in
-  Settings to use it. An earlier build truncated the stored login when
-  writing it back (see
-  `docs/solutions/logic-errors/keychain-write-via-security-interactive-truncates-2026-09-26.md`).
-  That is fixed: the login is now saved the same way Claude Code saves it,
-  then read back and compared byte for byte. If Claude Code ever asks you to
-  sign in, run `/login` once. With renewal off, open Claude Code once after
-  expiry and the app recovers by itself.
-- When renewal is on and Claude Code's login expires, the app first re-reads it (Claude Code
+- Optional: turn on **Renew Claude login automatically** (off by default).
+  When Claude Code's login expires, the app first re-reads it (Claude Code
   may already have renewed it). If it is still expired, the app renews it
-  with the stored refresh token and saves the result back to the same
-  Keychain item (or `~/.claude/.credentials.json`), so Claude Code keeps
-  working. It re-reads right before saving and never overwrites a login
-  Claude Code renewed in the meantime. Turn off **Renew Claude login
-  automatically** to only read; then open Claude Code once after expiry and
-  the app recovers by itself.
+  with the stored refresh token and saves it back to the same Keychain item
+  (or `~/.claude/.credentials.json`) the same way Claude Code does, then
+  reads it back and requires a byte-for-byte match. It re-reads right before
+  saving and never overwrites a login Claude Code renewed in the meantime.
+  With renewal off, open Claude Code once after expiry and the app recovers
+  by itself. If Claude Code ever asks you to sign in, run `/login` once.
+  (2.0.x builds with renewal could truncate the stored login; see
+  `docs/solutions/logic-errors/keychain-write-via-security-interactive-truncates-2026-09-26.md`.)
 - Optional: turn on **Claude Code statusline hint** for instant updates while
   Claude Code runs on this Mac. Your existing statusline keeps working (it is
   chained), `~/.claude/settings.json` is backed up first, and turning it off
@@ -139,6 +137,9 @@ Open the menu bar item; each service has a one-click setup.
 - Only usage percentages, reset times, plan name and account email are read.
   Prompts, responses and conversation files are never read or stored.
 - Tokens stay in memory and are sent only to the service they belong to.
+- Claude login renewal (only when turned on) sends the refresh token only to
+  Anthropic's token endpoint and writes the renewed login only to where
+  Claude Code already keeps it.
 - The statusline bridge saves only the `rate_limits` object.
 
 ## Check connections from Terminal

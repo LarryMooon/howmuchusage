@@ -11,7 +11,7 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 let wantsJSON = arguments.contains("--json")
 let wantsRaw = arguments.contains("--raw")
 let target = arguments.first { !$0.hasPrefix("--") } ?? "all"
-let version = "2.0.0-probe"
+let version = "2.1.0-probe"
 
 guard ["all", "codex", "claude", "local"].contains(target) else {
     print("usage: howmuchusage-probe [all|codex|claude|local] [--json|--raw]")

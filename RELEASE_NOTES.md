@@ -1,5 +1,29 @@
 # Howmuchusage Release Notes
 
+## 2.1.0
+
+- **Claude login renewal (optional, off by default).** Turn on *Renew Claude
+  login automatically*: an expired Claude Code login is re-read first, then
+  renewed with its refresh token and saved back to the same Keychain item or
+  credentials file, so Claude Code keeps working. A renewal Claude Code made
+  in the meantime always wins. Rejected renewals say that `/login` is needed
+  and back off for 10 minutes.
+- **Fixed: truncated Claude login on write-back.** 2.0.x builds saved the
+  renewed login through `security -i`, whose ~4 KB line limit cut it off and
+  signed Claude Code out. It is now saved like Claude Code saves it and read
+  back for a byte-for-byte check. Renewal was switched off for everyone
+  (new setting key); turn it on again if you want it.
+- **Fixed: stuck "server asked to slow down".** The Claude usage server
+  answers 429 with `Retry-After: 0`; the app now waits at least 5 minutes
+  instead of retrying within a minute and staying rate limited.
+- **Menu bar Size: Auto / Full / Compact.** Auto shrinks to a compact item
+  when macOS would hide it behind the notch; relaunching while hidden opens
+  the popover as a window.
+- Refresh button shows a spinner and a note such as
+  "Claude in 32s (rate limit)".
+- Diagnostics in `log show --predicate 'subsystem == "com.larrymoon.howmuchusage"'`.
+
+
 ## 2.0.0
 
 Rebuilt from scratch for live Claude + Codex usage across all devices.

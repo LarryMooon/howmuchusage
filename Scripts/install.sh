@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REF="${HOWMUCHUSAGE_REF:-refs/heads/main}"
-VERSION="${HOWMUCHUSAGE_VERSION:-2.0.0}"
+VERSION="${HOWMUCHUSAGE_VERSION:-2.1.0}"
 BASE="https://raw.githubusercontent.com/LarryMooon/howmuchusage/$REF/Downloads"
 ZIP="Howmuchusage-$VERSION-universal-macos.zip"
 TMP="$(mktemp -d)"

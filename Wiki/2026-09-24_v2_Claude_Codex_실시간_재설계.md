@@ -219,3 +219,5 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 테스트: 9KB 로그인을 임시 키체인에 실제 `security`로 저장/재조회(CI 통과).
   - 자동 갱신은 여전히 기본 꺼짐. 사용자가 새 빌드 설치 후 직접 켬. 첫 실전은 다음 로그인 만료 시점.
   - 알려진 작은 한계: 로그인 JSON에 비ASCII 문자가 있으면 `security -w`가 hex로 출력해 불일치로 판단될 수 있음(현재 로그인은 ASCII).
+- 2026-09-26: 설치 후 Claude가 "Old · 2d ago" + "server asked to slow down" → 원인은 사용량 서버가 429에 `Retry-After: 0`을 보내고 앱이 그대로 믿어 1분 안에 재요청 → 계속 제한. 정의만 되고 안 쓰이던 `rateLimitedMinimum`(5분)을 하한으로 적용(PR #13), 머지 후 빌드 게시.
+- 2026-09-26: 2.1.0 정리 — 버전 2.1.0, RELEASE_NOTES/README 갱신(자동 갱신 설명 정리, 429 하한, Size 설정, 개인정보), GitHub 저장소 설명/토픽, v2.1.0 태그와 릴리스, 병합된 브랜치 정리.
