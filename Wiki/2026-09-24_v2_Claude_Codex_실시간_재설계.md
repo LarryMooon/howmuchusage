@@ -214,3 +214,8 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 긴급 수정: 자동 갱신 설정 키를 `claudeAutoRefreshV2`로 바꾸고 기본값 false(기존 사용자도 강제로 꺼짐).
   - 재발 방지 문서: docs/solutions/logic-errors/keychain-write-via-security-interactive-truncates-2026-09-26.md
   - 남은 일: 길이 제한 없는 저장 방식 + 저장 후 바이트 단위 검증 + 4KB 이상 실제 크기 테스트. (키체인 쓰기 코드라 이 클라우드 세션에서는 차단될 수 있어 로컬 세션에서 진행)
+- 2026-09-26: 로컬 세션이 저장 방식을 다시 만들어 PR #11로 올림 → 검토 후 사용자 요청으로 머지, main에서 빌드 게시.
+  - 저장: `security add-generic-password -U -a <acct> -s "Claude Code-credentials" -X <hex>` (명령 인자, 길이 제한 없음, Claude Code와 같은 방식). 저장 후 다시 읽어 바이트 단위로 같아야 성공, 1회 재시도.
+  - 테스트: 9KB 로그인을 임시 키체인에 실제 `security`로 저장/재조회(CI 통과).
+  - 자동 갱신은 여전히 기본 꺼짐. 사용자가 새 빌드 설치 후 직접 켬. 첫 실전은 다음 로그인 만료 시점.
+  - 알려진 작은 한계: 로그인 JSON에 비ASCII 문자가 있으면 `security -w`가 hex로 출력해 불일치로 판단될 수 있음(현재 로그인은 ASCII).
