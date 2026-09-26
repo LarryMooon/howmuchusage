@@ -329,7 +329,9 @@ public final class ClaudeProvider: @unchecked Sendable {
         // Judge by what is actually stored: a tool can report an error on a
         // write that still went through.
         let check = try? await store.readStored(allowKeychain: allowed)
-        let saved = check?.credentials.accessToken == renewed.accessToken
+        // The whole login must match: a cut-off save can keep the access
+        // token intact and still break Claude Code.
+        let saved = check?.data == updated
         var problem: String?
         if !saved {
             if let writeError {

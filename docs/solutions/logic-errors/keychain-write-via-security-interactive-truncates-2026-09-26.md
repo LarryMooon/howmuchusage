@@ -38,3 +38,17 @@ used a throwaway keychain, also with a short value. Neither was close to the rea
 
 Hotfix: renewal is off by default (`claudeAutoRefreshV2`, default false) until the
 writer is rebuilt with a method that has no line-length limit and a full round-trip check.
+
+## Fix
+
+The writer now runs `security add-generic-password -U -a <account> -s
+"Claude Code-credentials" -X <hex>` with the login as a command argument (no
+line limit; this is also how Claude Code saves it). The argument is visible
+only to the same user's processes for the moment the tool runs. After the
+write it reads the item back and requires the exact same bytes, retries the
+write once, and otherwise reports the failure. The provider also judges the
+write-back by the whole stored login, not just the access token.
+`testLargeLoginSurvivesKeychainWriteExactly` writes a 9 KB login into a
+throwaway keychain with the real `security` tool. Renewal stays off by
+default; users turn it on in Settings.
+

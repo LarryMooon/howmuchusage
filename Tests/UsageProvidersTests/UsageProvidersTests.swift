@@ -305,9 +305,34 @@ final class ClaudeTokenRenewalTests: XCTestCase {
         XCTAssertEqual(ClaudeCredentialWriter.account(fromAttributes: attributes), "larry")
         XCTAssertNil(ClaudeCredentialWriter.account(fromAttributes: "\"acct\"<blob>=<NULL>"))
 
-        let command = ClaudeCredentialWriter.keychainUpdateCommand(account: "larry", data: Data("{}".utf8))
-        XCTAssertEqual(command, "add-generic-password -U -a \"larry\" -s \"Claude Code-credentials\" -X 7b7d\n")
-        XCTAssertNil(ClaudeCredentialWriter.keychainUpdateCommand(account: "a\" -w x", data: Data()))
+        XCTAssertEqual(
+            ClaudeCredentialWriter.keychainUpdateArguments(account: "larry", data: Data("{}".utf8)),
+            ["add-generic-password", "-U", "-a", "larry", "-s", "Claude Code-credentials", "-X", "7b7d"]
+        )
+    }
+
+    /// Real logins are ~2-6 KB; `security -i` used to cut them at ~4 KB of hex.
+    func testLargeLoginSurvivesKeychainWriteExactly() async throws {
+        let keychain = try temporaryDirectory().appendingPathComponent("test.keychain-db").path
+        let security = URL(fileURLWithPath: "/usr/bin/security")
+        for arguments in [["create-keychain", "-p", "test", keychain], ["unlock-keychain", "-p", "test", keychain]] {
+            let result = try await ProcessRunner.run(security, arguments: arguments, timeout: 30)
+            XCTAssertEqual(result.status, 0, result.stderrText)
+        }
+        defer { _ = try? ProcessRunner.runBlocking(security, arguments: ["delete-keychain", keychain], timeout: 30) }
+
+        let writer = ClaudeCredentialWriter(keychain: keychain)
+        let first = Data(#"{"claudeAiOauth":{"accessToken":"old"}}"#.utf8)
+        try await writer.write(first, to: .keychain)
+        let token = String(repeating: "a", count: 3_000)
+        let large = try JSONSerialization.data(
+            withJSONObject: ["claudeAiOauth": ["accessToken": token, "refreshToken": token + "r"], "mcpOAuth": ["x": token]],
+            options: [.sortedKeys]
+        )
+        XCTAssertGreaterThan(large.count, 9_000)
+        try await writer.write(large, to: .keychain)
+        let stored = await writer.readKeychain()
+        XCTAssertEqual(stored, large, "the whole login must be stored, byte for byte")
     }
 }
 
