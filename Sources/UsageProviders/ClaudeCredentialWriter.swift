@@ -88,9 +88,12 @@ public struct ClaudeCredentialWriter: Sendable {
     }
 
     private let securityTool: URL
+    /// A specific keychain file; nil means the user's default keychain.
+    private let keychain: String?
 
-    public init(securityTool: URL = URL(fileURLWithPath: "/usr/bin/security")) {
+    public init(securityTool: URL = URL(fileURLWithPath: "/usr/bin/security"), keychain: String? = nil) {
         self.securityTool = securityTool
+        self.keychain = keychain
     }
 
     public func write(_ data: Data, to location: ClaudeLoginLocation) async throws {
@@ -103,23 +106,41 @@ public struct ClaudeCredentialWriter: Sendable {
     }
 
     /// Goes through Apple's `security` tool, like the read path, so the
-    /// item's existing access list keeps working. The secret is passed on
-    /// stdin (interactive mode), never as a command-line argument.
+    /// item's existing access list keeps working. The login is passed as a
+    /// hex argument, the same way Claude Code saves it: `security -i` cuts
+    /// lines at ~4 KB, which truncated real logins. The write is then read
+    /// back and must match byte for byte.
     private func writeKeychain(_ data: Data) async throws {
         let account = await keychainAccount() ?? NSUserName()
-        guard let command = Self.keychainUpdateCommand(account: account, data: data) else {
-            throw WriteError.keychain("unsupported account name")
+        var lastProblem = "saved login did not match"
+        for _ in 0..<2 {
+            let result = try await ProcessRunner.run(
+                securityTool,
+                arguments: Self.keychainUpdateArguments(account: account, data: data) + keychainArgument,
+                timeout: 120
+            )
+            if result.status != 0 || result.timedOut {
+                let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+                lastProblem = stderr.isEmpty ? "security exited \(result.status)" : stderr
+                continue
+            }
+            if await readKeychain() == data { return }
         }
-        let result = try await ProcessRunner.run(
+        throw WriteError.keychain(lastProblem)
+    }
+
+    private var keychainArgument: [String] { keychain.map { [$0] } ?? [] }
+
+    /// The stored login exactly as saved, for verifying a write.
+    func readKeychain() async -> Data? {
+        guard let result = try? await ProcessRunner.run(
             securityTool,
-            arguments: ["-i"],
-            stdin: Data(command.utf8),
+            arguments: ["find-generic-password", "-s", ClaudeCredentialStore.keychainService, "-w"] + keychainArgument,
             timeout: 120
-        )
-        let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.status == 0, !result.timedOut, stderr.isEmpty else {
-            throw WriteError.keychain(stderr.isEmpty ? "security exited \(result.status)" : stderr)
+        ), result.status == 0 else {
+            return nil
         }
+        return Data(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
     }
 
     /// The existing item's account, so the update replaces it instead of
@@ -127,7 +148,7 @@ public struct ClaudeCredentialWriter: Sendable {
     private func keychainAccount() async -> String? {
         guard let result = try? await ProcessRunner.run(
             securityTool,
-            arguments: ["find-generic-password", "-s", ClaudeCredentialStore.keychainService],
+            arguments: ["find-generic-password", "-s", ClaudeCredentialStore.keychainService] + keychainArgument,
             timeout: 30
         ), result.status == 0 else {
             return nil
@@ -147,13 +168,11 @@ public struct ClaudeCredentialWriter: Sendable {
         return nil
     }
 
-    /// One `security -i` line. The login is hex-encoded (`-X`) so no quoting
-    /// of its JSON is needed; the account is restricted to safe characters.
-    static func keychainUpdateCommand(account: String, data: Data) -> String? {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-@+ "))
-        guard !account.isEmpty, account.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+    /// `add-generic-password -U` updates the existing item in place. The
+    /// login is hex-encoded (`-X`) so its JSON needs no quoting.
+    static func keychainUpdateArguments(account: String, data: Data) -> [String] {
         let hex = data.map { String(format: "%02x", $0) }.joined()
-        return "add-generic-password -U -a \"\(account)\" -s \"\(ClaudeCredentialStore.keychainService)\" -X \(hex)\n"
+        return ["add-generic-password", "-U", "-a", account, "-s", ClaudeCredentialStore.keychainService, "-X", hex]
     }
 
     private func writeFile(_ data: Data, to url: URL) throws {
