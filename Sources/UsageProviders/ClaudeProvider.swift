@@ -32,7 +32,7 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
         case .unauthorized:
             return "Claude rejected the stored login. Run `claude` and /login again."
         case .rateLimited:
-            return "Claude usage server asked to slow down. Retrying later."
+            return "Claude's usage server is limiting requests for this login. Showing the last value; it retries automatically."
         case .http(let status):
             return status == 403
                 ? "This Claude login cannot read usage (403). Use a normal `claude` /login, not a setup token."
@@ -254,6 +254,16 @@ public final class ClaudeProvider: @unchecked Sendable {
             let reloaded = try await self.credentials(reload: true)
             guard reloaded.accessToken != credentials.accessToken else {
                 throw reloaded.isExpired(now: now) ? ClaudeProviderError.tokenExpired : ClaudeProviderError.unauthorized
+            }
+            return try await fetch(with: reloaded, now: now)
+        } catch let error as ClaudeProviderError {
+            // The usage server answers a replaced or expired token with 429
+            // instead of 401. Claude Code rotates its login when it renews
+            // it, so check for a newer token before waiting out the limit.
+            guard case .rateLimited = error else { throw error }
+            let reloaded = try await self.credentials(reload: true)
+            guard reloaded.accessToken != credentials.accessToken, !reloaded.isExpired(now: now) else {
+                throw error
             }
             return try await fetch(with: reloaded, now: now)
         }
