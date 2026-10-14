@@ -283,6 +283,48 @@ final class ClaudeTokenRenewalTests: XCTestCase {
         XCTAssertTrue(text.contains("failed"))
     }
 
+    private func validLogin(_ token: String, in directory: URL) throws -> URL {
+        let file = directory.appendingPathComponent(".credentials.json")
+        try Data(#"{"claudeAiOauth":{"accessToken":"\#(token)","refreshToken":"rt","expiresAt":4102444800000}}"#.utf8).write(to: file)
+        return file
+    }
+
+    func testRateLimitWithReplacedTokenRetriesWithTheNewOne() async throws {
+        // Claude Code rotated its login; the server answers the old token with 429.
+        let directory = try temporaryDirectory()
+        let file = try validLogin("at-old", in: directory)
+        var authorizations: [String] = []
+        StubURLProtocol.handler = { request in
+            let auth = request.value(forHTTPHeaderField: "Authorization") ?? ""
+            authorizations.append(auth)
+            if auth == "Bearer at-old" {
+                _ = try? self.validLogin("at-new", in: directory)
+                return (429, Data())
+            }
+            return (200, Self.usageBody)
+        }
+
+        let snapshot = try await provider(file: file, autoRefresh: false).read(now: now)
+        XCTAssertEqual(snapshot.windows.first?.usedPercent, 12)
+        XCTAssertEqual(authorizations, ["Bearer at-old", "Bearer at-new"])
+    }
+
+    func testRateLimitWithSameTokenWaits() async throws {
+        let file = try validLogin("at-same", in: try temporaryDirectory())
+        var calls = 0
+        StubURLProtocol.handler = { _ in
+            calls += 1
+            return (429, Data())
+        }
+        do {
+            _ = try await provider(file: file, autoRefresh: false).read(now: now)
+            XCTFail("expected rate limit")
+        } catch {
+            guard case .rateLimited? = error as? ClaudeProviderError else { return XCTFail("unexpected \(error)") }
+        }
+        XCTAssertEqual(calls, 1, "the same token is not retried right away")
+    }
+
     func testAutoRefreshOffNeverCallsServer() async throws {
         let file = try expiredLogin(in: try temporaryDirectory())
         StubURLProtocol.handler = { _ in
