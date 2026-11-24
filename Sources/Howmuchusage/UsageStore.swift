@@ -290,9 +290,13 @@ final class UsageStore: ObservableObject {
             await refresh(provider)
             let policy = PollPolicy.for(provider)
             var delay = policy.nextDelay(for: state(for: provider).poll, now: Date())
-            if case .needsSetup(.claudeExpired) = state(for: provider).connection {
-                // Re-checking the login is cheap; recover quickly once Claude Code renews it.
-                delay = min(delay, 120)
+            switch state(for: provider).connection {
+            case .needsSetup(.claudeExpired), .needsSetup(.claudeNotSignedIn):
+                // Re-checking the login is cheap; recover quickly once Claude Code
+                // renews it or the user signs in again (no error backoff here).
+                delay = min(delay, 60)
+            default:
+                break
             }
             if case .needsSetup(.claudeNotConnected) = state(for: provider).connection {
                 delay = policy.idle

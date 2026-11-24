@@ -141,6 +141,14 @@ final class ClaudeProviderTests: XCTestCase {
         XCTAssertEqual(credentials.subscriptionType, "pro")
     }
 
+    func testEndedLoginInFileAsksToSignIn() async throws {
+        let file = try temporaryDirectory().appendingPathComponent(".credentials.json")
+        try Data(#"{"claudeAiOauth":{"accessToken":"","refreshToken":"","expiresAt":0,"loginEnded":"time_limit"}}"#.utf8).write(to: file)
+        XCTAssertThrowsError(try ClaudeCredentials.parse(Data(contentsOf: file))) { error in
+            XCTAssertEqual(error as? ClaudeCredentials.ParseError, .missingAccessToken)
+        }
+    }
+
     func testMissingLoginWithoutConsentAsksToConnect() async {
         let store = ClaudeCredentialStore(credentialsFile: URL(fileURLWithPath: "/nonexistent/.credentials.json"))
         do {
