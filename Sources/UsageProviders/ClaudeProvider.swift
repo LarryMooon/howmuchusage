@@ -83,10 +83,16 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
             )
             if result.status == 0 {
                 let data = Data(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
-                if let credentials = try? ClaudeCredentials.parse(data) {
+                do {
+                    let credentials = try ClaudeCredentials.parse(data)
                     return ClaudeStoredLogin(credentials: credentials, data: data, location: .keychain)
+                } catch ClaudeCredentials.ParseError.missingAccessToken {
+                    // Claude Code blanks the tokens when it signs out or its
+                    // login reaches its time limit (`loginEnded`).
+                    keychainError = .notSignedIn
+                } catch {
+                    keychainError = .badResponse
                 }
-                keychainError = .badResponse
             } else if result.status != 44 {
                 // 44 = item not found; anything else is a denial or cancel.
                 keychainError = .keychainDenied(result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
