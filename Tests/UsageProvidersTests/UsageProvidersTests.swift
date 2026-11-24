@@ -339,6 +339,29 @@ final class ClaudeTokenRenewalTests: XCTestCase {
         }
     }
 
+    func testChangedUsageFormatIsReportedAsSuch() async throws {
+        let file = try validLogin("at", in: try temporaryDirectory())
+        StubURLProtocol.handler = { _ in (200, Data(#"{"brand_new_shape":{"x":1}}"#.utf8)) }
+        do {
+            _ = try await provider(file: file, autoRefresh: false).read(now: now)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? ClaudeProviderError, .usageFormatChanged)
+        }
+    }
+
+    func testBlankStoredLoginMeansSignedOutNotDamaged() throws {
+        // Claude Code blanks both tokens when a login reaches its maximum lifetime.
+        let signedOut = Data(#"{"claudeAiOauth":{"accessToken":"","refreshToken":"","expiresAt":0}}"#.utf8)
+        XCTAssertThrowsError(try ClaudeCredentials.parse(signedOut)) { error in
+            XCTAssertEqual(ClaudeCredentialStore.problem(readingStoredLogin: error), .notSignedIn)
+        }
+        let truncated = Data(#"{"claudeAiOauth":{"accessToken":"at-cut-of"#.utf8)
+        XCTAssertThrowsError(try ClaudeCredentials.parse(truncated)) { error in
+            XCTAssertEqual(ClaudeCredentialStore.problem(readingStoredLogin: error), .storedLoginUnreadable)
+        }
+    }
+
     func testKeychainAccountParsingAndCommand() {
         let attributes = """
         keychain: "/Users/me/Library/Keychains/login.keychain-db"

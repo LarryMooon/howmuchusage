@@ -64,7 +64,7 @@ public struct ClaudeTokenRefreshClient: Sendable {
             do {
                 return try ClaudeTokenRefresh.parseResponse(data, now: now)
             } catch {
-                throw ClaudeProviderError.badResponse
+                throw ClaudeProviderError.renewalResponseUnreadable
             }
         case 400, 401, 403:
             // The refresh token was used up or revoked; only a new sign-in helps.

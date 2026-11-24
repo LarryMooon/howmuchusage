@@ -225,3 +225,9 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
   - 원인 후보: 사용량 서버는 교체/만료된 토큰에 401 대신 429를 돌려줌(커뮤니티 보고 TokenTracker#608, claude-code#30930). Claude Code가 로그인을 갱신해 토큰을 교체하면, 앱은 메모리의 옛 토큰을 계속 써서 429가 이어질 수 있음(기존 코드는 401일 때만 키체인을 다시 읽음).
   - 수정: 429를 받으면 키체인을 다시 읽어, 토큰이 바뀌었고 만료 전이면 새 토큰으로 즉시 1회 재요청. 같으면 기존처럼 최소 5분 대기. 읽기만 하는 변경.
   - 테스트: 교체된 토큰이면 새 토큰으로 재요청 성공 / 같은 토큰이면 1회만 요청하고 대기.
+
+## 2026-11-24 Claude "응답을 이해 못 함" 9일 정지
+
+- 원인(맥 세션 확인): Claude Code 로그인이 최대 기간에 도달해 키체인 토큰이 비워짐. 앱이 망가뜨린 것 아님.
+- 맥 세션 브랜치 `fix-claude-ended-login-message`: 빈 토큰 → "다시 로그인" 안내 (머지 대기).
+- 이 클라우드 브랜치(`claude/intelligent-bohr-u24qu4`, 미머지): 남은 실패도 단계별 문구로 분리 — `usageFormatChanged`(응답 형식 변경, 최상위 키 이름만 로그), `renewalResponseUnreadable`, `storedLoginUnreadable`(JSON 손상). 맥 브랜치 머지 후 그 위에 다시 맞춰 PR 예정.

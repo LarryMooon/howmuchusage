@@ -364,7 +364,7 @@ final class UsageStore: ObservableObject {
             case .keychainNotAllowed?: connection = .needsSetup(.claudeNotConnected)
             case .notSignedIn?: connection = .needsSetup(.claudeNotSignedIn)
             case .tokenExpired?: connection = .needsSetup(.claudeExpired)
-            case .unauthorized?, .refreshRejected?, .keychainDenied?, .http(status: 403)?:
+            case .unauthorized?, .refreshRejected?, .keychainDenied?, .storedLoginUnreadable?, .http(status: 403)?:
                 connection = .needsSetup(.claudeRelogin(error.localizedDescription))
             default:
                 connection = .failing(error.localizedDescription)

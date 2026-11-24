@@ -1,8 +1,11 @@
 import Foundation
+import os
 import UsageCore
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+
+private let usageLog = Logger(subsystem: "com.larrymoon.howmuchusage", category: "claude")
 
 public enum ClaudeProviderError: Error, LocalizedError, Equatable {
     case keychainNotAllowed
@@ -16,13 +19,19 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
     case http(status: Int)
     case network(String)
     case badResponse
+    /// Claude Code's saved login exists but is not valid JSON (damaged).
+    case storedLoginUnreadable
+    /// The usage endpoint answered 200 with a shape this version cannot read.
+    case usageFormatChanged
+    /// The token endpoint answered 200 with a shape this version cannot read.
+    case renewalResponseUnreadable
 
     public var errorDescription: String? {
         switch self {
         case .keychainNotAllowed:
             return "Connect Claude to allow reading the Claude Code login."
         case .notSignedIn:
-            return "No Claude Code login found. Run `claude` and /login once."
+            return "Claude Code is signed out (no login, or it expired). Run `claude` and /login once."
         case .keychainDenied(let detail):
             return "Keychain access was denied\(detail.isEmpty ? "" : ": \(detail)")."
         case .tokenExpired:
@@ -39,6 +48,12 @@ public enum ClaudeProviderError: Error, LocalizedError, Equatable {
                 : "Claude usage request failed (HTTP \(status))."
         case .network(let detail):
             return "Network error: \(detail)"
+        case .storedLoginUnreadable:
+            return "Claude Code's saved login can't be read (it may be damaged). Run `claude` and /login once."
+        case .usageFormatChanged:
+            return "Claude's usage response changed format. This app needs an update; showing the last value."
+        case .renewalResponseUnreadable:
+            return "Claude's login renewal answer was not understood; the login was not changed."
         case .badResponse:
             return "Claude usage response was not understood."
         }
@@ -83,10 +98,12 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
             )
             if result.status == 0 {
                 let data = Data(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
-                if let credentials = try? ClaudeCredentials.parse(data) {
+                do {
+                    let credentials = try ClaudeCredentials.parse(data)
                     return ClaudeStoredLogin(credentials: credentials, data: data, location: .keychain)
+                } catch {
+                    keychainError = Self.problem(readingStoredLogin: error)
                 }
-                keychainError = .badResponse
             } else if result.status != 44 {
                 // 44 = item not found; anything else is a denial or cancel.
                 keychainError = .keychainDenied(result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -100,6 +117,16 @@ public final class ClaudeCredentialStore: @unchecked Sendable {
 
         if let keychainError { throw keychainError }
         throw allowKeychain ? ClaudeProviderError.notSignedIn : ClaudeProviderError.keychainNotAllowed
+    }
+
+    /// Claude Code signs out by blanking the tokens (for example when the
+    /// login reaches its maximum lifetime), so an empty token means "sign in
+    /// again", not a damaged item. Only JSON that can't be read is damage.
+    static func problem(readingStoredLogin error: Error) -> ClaudeProviderError {
+        if (error as? ClaudeCredentials.ParseError) == .missingAccessToken {
+            return .notSignedIn
+        }
+        return .storedLoginUnreadable
     }
 }
 
@@ -128,7 +155,10 @@ public struct ClaudeUsageClient: Sendable {
         do {
             return try ClaudeOAuthUsageParser.snapshot(from: data, planName: planName, observedAt: now)
         } catch {
-            throw ClaudeProviderError.badResponse
+            // Keys only, never values, so a format change can be diagnosed.
+            let keys = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?.keys.sorted() ?? []
+            usageLog.notice("usage format not understood; top-level keys: \(keys.joined(separator: ","), privacy: .public)")
+            throw ClaudeProviderError.usageFormatChanged
         }
     }
 
@@ -328,7 +358,7 @@ public final class ClaudeProvider: @unchecked Sendable {
             updated = try ClaudeTokenRefresh.updatedCredentialsData(latest.data, with: response)
             renewed = try ClaudeCredentials.parse(updated)
         } catch {
-            throw ClaudeProviderError.badResponse
+            throw ClaudeProviderError.storedLoginUnreadable
         }
 
         // The old refresh token is likely spent now, so a failed write-back
