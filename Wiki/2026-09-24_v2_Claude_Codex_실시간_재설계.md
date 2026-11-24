@@ -228,3 +228,9 @@ App Nap 때문에 timer가 늦어지지 않도록 `ProcessInfo.beginActivity(.us
 - 2026-11-25: Claude "usage response was not understood" → 원인은 Claude Code 로그인이 최대 수명(`refreshTokenExpiresAt`, 2026-11-24)에 도달해 Claude Code가 키체인 토큰을 비움(`loginEnded: time_limit`). 앱 쓰기 버그 아님(JSON 정상). 빈 토큰을 "이해 못 함" 대신 "로그인 필요"(notSignedIn)로 표시하도록 수정. 사용자는 Claude Code에서 `/login` 필요.
 - 2026-11-25: Claude Code 로그인이 최대 기간에 끝나면 키체인 토큰이 비워짐 → 앱은 '다시 로그인'으로 안내. 앱의 쓰기 버그 아님.
 - 2026-11-25: Sign in via Claude Code로 로그인해도 바로 안 뜸 → 원인: '로그인 없음' 상태는 빠른 재확인(만료 상태만 해당)에서 빠져 있어 오류 backoff(최대 15분)를 따름. 로그인 없음/만료 모두 60초 안에 재확인하도록 수정.
+
+## 2026-11-24 Claude "응답을 이해 못 함" 9일 정지
+
+- 원인(맥 세션 확인): Claude Code 로그인이 최대 기간에 도달해 키체인 토큰이 비워짐. 앱이 망가뜨린 것 아님.
+- 맥 세션이 #16(빈 토큰 → 다시 로그인), #17(로그인 없음도 60초 재확인)으로 머지·게시함.
+- 이 클라우드 브랜치(`claude/intelligent-bohr-u24qu4`, 미머지): 남은 실패도 단계별 문구로 분리 — `usageFormatChanged`(응답 형식 변경, 최상위 키 이름만 로그), `renewalResponseUnreadable`, `storedLoginUnreadable`(JSON 손상). #17 위로 merge해 맞춤.
